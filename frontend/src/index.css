@@ -1,0 +1,312 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ikra Slab — heading font from brandbook */
+@font-face {
+  font-family: 'Ikra Slab';
+  src: url('/fonts/ikra-slab.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Inter — основной текстовый шрифт (весь body, кроме брендовых заголовков) */
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-500.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* Prevent auto text sizing on mobile */
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #2D2520;
+  background-color: #FBF9F4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Consistent line-height across devices */
+  line-height: 1.5;
+  /* Prevent horizontal overflow on mobile */
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* overflow-x removed — was cutting dropdown menus in header */
+
+/* Hide scrollbar */
+::-webkit-scrollbar {
+  display: none;
+}
+html {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Ikra Slab', Georgia, serif;
+  line-height: 1.2;
+  font-weight: 400;
+  /* Prevent word break issues on mobile */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Responsive base font sizes */
+html {
+  font-size: 16px;
+}
+
+@media (max-width: 640px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+/* Ensure text doesn't overflow containers */
+p, span, a, li {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+@layer components {
+  .section-padding {
+    @apply py-6 md:py-10;
+  }
+}
+
+/* Ornamental background pattern */
+.ornament-pattern {
+  position: relative;
+}
+.ornament-pattern::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5 L35 15 L45 15 L37 22 L40 32 L30 26 L20 32 L23 22 L15 15 L25 15 Z' fill='%23C4944E' fill-opacity='0.5'/%3E%3Ccircle cx='30' cy='45' r='6' fill='none' stroke='%23C4944E' stroke-opacity='0.3' stroke-width='1'/%3E%3Ccircle cx='30' cy='45' r='2' fill='%23C4944E' fill-opacity='0.3'/%3E%3C/svg%3E");
+  background-size: 80px 80px;
+}
+
+/* Info ticker animation */
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-scroll {
+  animation: ticker-scroll 30s linear infinite;
+}
+.ticker-scroll:hover {
+  animation-play-state: paused;
+}
+
+/* Gold separator line */
+.gold-separator {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, #ba9b4f 30%, #d4b366 50%, #ba9b4f 70%, transparent 100%);
+}
+
+/* Infinite scroll animation for photo strip */
+@keyframes scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-scroll {
+  animation: scroll 30s linear infinite;
+  will-change: transform;
+}
+.animate-scroll:hover {
+  animation-play-state: paused;
+}
+
+/* Fade-in for carousel slides */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(1.02); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Slide-up animation */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out forwards;
+}
+
+/* Slow pulse animation for holidays */
+@keyframes pulseSlow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+.animate-pulse-slow {
+  animation: pulseSlow 3s ease-in-out infinite;
+}
+
+/* Slow bounce animation */
+@keyframes bounceSlow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.animate-bounce-slow {
+  animation: bounceSlow 2s ease-in-out infinite;
+}
+
+/* Slow spin for sparkles */
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spinSlow 4s linear infinite;
+}
+
+/* Firework animations */
+@keyframes fireworkLeft {
+  0% { transform: translateY(0) translateX(0) scale(0); opacity: 1; }
+  50% { transform: translateY(-30px) translateX(-8px) scale(1); opacity: 1; }
+  100% { transform: translateY(-50px) translateX(-15px) scale(0.5); opacity: 0; }
+}
+@keyframes fireworkRight {
+  0% { transform: translateY(0) translateX(0) scale(0); opacity: 1; }
+  50% { transform: translateY(-30px) translateX(8px) scale(1); opacity: 1; }
+  100% { transform: translateY(-50px) translateX(15px) scale(0.5); opacity: 0; }
+}
+@keyframes fireworkUp {
+  0% { transform: translateY(0) scale(0); opacity: 1; }
+  50% { transform: translateY(-35px) scale(1.2); opacity: 1; }
+  100% { transform: translateY(-55px) scale(0.3); opacity: 0; }
+}
+@keyframes fireworkSparkle {
+  0%, 100% { transform: scale(0.8); opacity: 0.5; }
+  50% { transform: scale(1.2); opacity: 1; }
+}
+
+.firework-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.firework {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.firework-left-1 {
+  left: 2px;
+  bottom: 20%;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  animation: fireworkLeft 2s ease-out infinite;
+  box-shadow: 0 0 6px #fbbf24;
+}
+.firework-left-2 {
+  left: 4px;
+  bottom: 35%;
+  background: linear-gradient(135deg, #34d399, #10b981);
+  animation: fireworkLeft 2.3s ease-out infinite 0.3s;
+  box-shadow: 0 0 6px #34d399;
+}
+.firework-left-3 {
+  left: 1px;
+  bottom: 50%;
+  background: linear-gradient(135deg, #f472b6, #ec4899);
+  animation: fireworkLeft 1.8s ease-out infinite 0.6s;
+  box-shadow: 0 0 6px #f472b6;
+}
+
+.firework-right-1 {
+  right: 2px;
+  bottom: 25%;
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  animation: fireworkRight 2.1s ease-out infinite 0.2s;
+  box-shadow: 0 0 6px #60a5fa;
+}
+.firework-right-2 {
+  right: 5px;
+  bottom: 40%;
+  background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+  animation: fireworkRight 1.9s ease-out infinite 0.5s;
+  box-shadow: 0 0 6px #a78bfa;
+}
+.firework-right-3 {
+  right: 3px;
+  bottom: 55%;
+  background: linear-gradient(135deg, #fb923c, #f97316);
+  animation: fireworkRight 2.4s ease-out infinite 0.8s;
+  box-shadow: 0 0 6px #fb923c;
+}
+
+/* Hide horizontal scrollbar */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Reduced motion: stop video autoplay and animations */
+@media (prefers-reduced-motion: reduce) {
+  .hero-video {
+    display: none;
+  }
+  .animate-scroll {
+    animation: none;
+  }
+  .animate-fade-in {
+    animation: none;
+  }
+  .animate-slide-up {
+    animation: none;
+  }
+  .animate-pulse-slow {
+    animation: none;
+  }
+  .animate-bounce-slow {
+    animation: none;
+  }
+  .animate-spin-slow {
+    animation: none;
+  }
+  .firework {
+    display: none;
+  }
+}

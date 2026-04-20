@@ -1,0 +1,205 @@
+import { useState } from 'react';
+import {
+  ChevronRight,
+  ChevronLeft,
+  FileText,
+  Loader2,
+} from 'lucide-react';
+import PageLayout from '@/components/layout/PageLayout';
+import PageHero from '@/components/shared/PageHero';
+import Container from '@/components/ui/Container';
+import Section from '@/components/ui/Section';
+import Badge from '@/components/ui/Badge';
+import { useCafe } from '@/hooks/useWordPressData';
+import { cafeMenu as fallbackMenu } from '@/data/cafe';
+import { usePageContent } from '@/hooks/useWordPressData';
+import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
+
+// Menu slides data
+const menuSlides = [
+  {
+    id: 'main',
+    title: 'Основное меню',
+    image: '/images/menu/menu-0.jpg',
+  },
+  {
+    id: 'kids',
+    title: 'Детское меню',
+    image: '/images/menu/kids-0.jpg',
+  },
+];
+
+// Menu Slider Component
+function MenuSlider() {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+
+  const nextSlide = () => {
+    setCurrentSlide((prev) => (prev + 1) % menuSlides.length);
+  };
+
+  const prevSlide = () => {
+    setCurrentSlide((prev) => (prev - 1 + menuSlides.length) % menuSlides.length);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const diff = touchStart - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) nextSlide();
+      else prevSlide();
+    }
+    setTouchStart(null);
+  };
+
+  const slide = menuSlides[currentSlide];
+
+  return (
+    <section className="py-8 bg-surface">
+      <Container>
+        <h2 className="font-heading text-xl font-bold text-text-primary mb-4 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-primary" />
+          Меню
+        </h2>
+
+        <div
+          className="relative rounded-2xl overflow-hidden bg-surface-warm shadow-lg"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Slide content */}
+          <div className="relative aspect-[3/4] sm:aspect-[4/3] md:aspect-[16/10] overflow-hidden">
+            <img
+              src={slide.image}
+              alt={slide.title}
+              className="w-full h-full object-contain bg-white"
+            />
+          </div>
+
+          {/* Navigation arrows */}
+          <button
+            onClick={prevSlide}
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-colors"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+          <button
+            onClick={nextSlide}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-colors"
+          >
+            <ChevronRight className="w-6 h-6" />
+          </button>
+
+          {/* Slide title bar */}
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-white">{slide.title}</h3>
+              {/* Dots indicator */}
+              <div className="flex gap-2">
+                {menuSlides.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentSlide(idx)}
+                    className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                      idx === currentSlide ? 'bg-primary' : 'bg-white/50 hover:bg-white/70'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Container>
+    </section>
+  );
+}
+
+// Cafe menu categories section with WP data
+function CafeMenuSection() {
+  const { data: wpCafe, loading } = useCafe();
+
+  // Convert WP response (Record<string, {name, items}>) to array format
+  const wpCategories = Object.keys(wpCafe).length > 0
+    ? Object.entries(wpCafe).map(([key, cat]) => ({
+        id: key,
+        name: cat.name,
+        items: cat.items.map((item) => ({
+          name: item.name,
+          price: item.price,
+          description: item.description || undefined,
+          badge: item.badge || undefined,
+        })),
+      }))
+    : null;
+
+  const categories = wpCategories || fallbackMenu;
+
+  if (loading) {
+    return (
+      <Section title="Меню кафетерия">
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Меню кафетерия" subtitle="Блюда и напитки для восстановления сил">
+      <div className="space-y-8 max-w-4xl mx-auto">
+        {categories.map((cat) => (
+          <div key={cat.id}>
+            <h3 className="font-heading text-xl font-bold text-text-primary mb-4">{cat.name}</h3>
+            <div className="space-y-2">
+              {cat.items.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between rounded-xl bg-surface border border-border/50 px-5 py-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-text-primary text-sm font-medium">{item.name}</span>
+                    {item.badge && (
+                      <Badge variant="default" className="text-xs py-0.5 flex-shrink-0">
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="text-primary font-bold text-sm flex-shrink-0 ml-4">
+                    {item.price.toLocaleString('ru-RU')}&nbsp;&#8381;
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+export default function CafePage() {
+  // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
+  // Если в админке для slug «cafe» добавлены блоки — они показываются после PageHero.
+  const { data: pageContent } = usePageContent('cafe');
+
+  return (
+    <PageLayout title="Кафетерий" description="Кафетерий термального комплекса Термбург: здоровые блюда, травяные чаи, напитки и закуски. Меню для восстановления сил после парных и SPA.">
+      <PageHero
+        title="Кафетерий"
+        subtitle="Вкусная кухня для идеального отдыха"
+        backgroundImage="/images/heroes/cafe.webp"
+      />
+      {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
+
+      {/* Menu Slider */}
+      <MenuSlider />
+
+      {/* Menu Categories from WP */}
+      <CafeMenuSection />
+    </PageLayout>
+  );
+}

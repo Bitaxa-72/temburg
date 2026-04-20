@@ -1,0 +1,124 @@
+# Block direct wp-login.php access (плагин WPS Hide Login заменяет URL логина на секретный slug — см. HANDOVER.md)
+<Files wp-login.php>
+  Require all denied
+</Files>
+
+php_value default_charset utf-8
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+
+# WordPress PHP files - serve directly (not through wp-index.php)
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule \.php$ - [L]
+
+# Hidden login URL — замените HIDDEN_LOGIN_SLUG на реальный slug перед деплоем (см. HANDOVER.md § Доступы)
+# Значение должно совпадать с настройкой плагина WPS Hide Login и не публиковаться в открытых источниках.
+RewriteRule ^HIDDEN_LOGIN_SLUG/?$ /wp-index.php [L]
+
+# WordPress API - route through wp-index.php
+RewriteRule ^wp-json(.*)$ /wp-index.php [L]
+
+RewriteRule ^termburg(.*)$ /wp-index.php [L]
+
+# WordPress admin directory - serve files directly
+RewriteRule ^wp-admin(.*)$ - [L]
+
+# WordPress static content
+RewriteRule ^wp-content(.*)$ - [L]
+RewriteRule ^wp-includes(.*)$ - [L]
+
+# Sitemaps
+RewriteRule ^sitemap\.xml$ - [L]
+RewriteRule ^sitemap_index\.xml$ /wp-index.php [L]
+RewriteRule ^([^/]+)-sitemap\.xml$ /wp-index.php [L]
+
+# Force HTTPS in redirects
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+# 301 Redirects from old WP URLs
+RewriteRule ^about-kompany/?$ https://termburg.ru/about [R=301,L]
+RewriteRule ^cooperation/?$ https://termburg.ru/partners [R=301,L]
+RewriteRule ^publichnaya-oferta/?$ https://termburg.ru/offer [R=301,L]
+RewriteRule ^visiting-rules/?$ https://termburg.ru/rules [R=301,L]
+RewriteRule ^services/bani-bochki/?$ https://termburg.ru/steam-rooms [R=301,L]
+RewriteRule ^services/bassejn/?$ https://termburg.ru/pools [R=301,L]
+RewriteRule ^services/hammam/?$ https://termburg.ru/steam-rooms [R=301,L]
+RewriteRule ^services/individualnye-russkie-parnye/?$ https://termburg.ru/steam-rooms [R=301,L]
+RewriteRule ^services/lipovaya-sauna/?$ https://termburg.ru/steam-rooms [R=301,L]
+RewriteRule ^services/peschanaya-sauna/?$ https://termburg.ru/steam-rooms [R=301,L]
+RewriteRule ^services/russkaya-parnaya/?$ https://termburg.ru/steam-rooms [R=301,L]
+RewriteRule ^services/sauna-s-gimalajskoj-solyu/?$ https://termburg.ru/steam-rooms [R=301,L]
+RewriteRule ^services/travyanaya-sauna/?$ https://termburg.ru/steam-rooms [R=301,L]
+RewriteRule ^stranicza-bronirovaniya/?$ https://termburg.ru/services [R=301,L]
+RewriteRule ^certificates/?$ https://termburg.ru/pricing [R=301,L]
+RewriteRule ^gift_boxes/?$ https://termburg.ru/pricing [R=301,L]
+RewriteRule ^kupit-onlajn/?$ https://termburg.ru/pricing [R=301,L]
+RewriteRule ^price-abonements/?$ https://termburg.ru/pricing [R=301,L]
+RewriteRule ^price-list/?$ https://termburg.ru/pricing [R=301,L]
+RewriteRule ^product-category/(.*)$ https://termburg.ru/pricing [R=301,L]
+RewriteRule ^product/individualnye-pareniya/?$ https://termburg.ru/services [R=301,L]
+RewriteRule ^product/klassicheskij-massazh/?$ https://termburg.ru/services [R=301,L]
+RewriteRule ^product/(.*)$ https://termburg.ru/pricing [R=301,L]
+# Safe news redirect: только для несуществующих /news/article-name
+# (когда есть директория /news/index.html — пропускаем, иначе будет infinite loop)
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^news/(.+)$ https://termburg.ru/news [R=301,L]
+
+RewriteRule ^school-par/?$ https://termburg.ru/steam-school [R=301,L]
+RewriteRule ^timetable/?$ https://termburg.ru/schedule [R=301,L]
+RewriteRule ^profitable-offer/?$ https://termburg.ru/promotions [R=301,L]
+RewriteRule ^menyu-restorana/?$ https://termburg.ru/cafe [R=301,L]
+RewriteRule ^job/?$ https://termburg.ru/careers [R=301,L]
+RewriteRule ^vacancy/(.*)$ https://termburg.ru/careers [R=301,L]
+RewriteRule ^reviews/?$ https://termburg.ru/ [R=301,L]
+
+# Static files serve directly
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule . - [L]
+
+# Prerender priority: если для URL есть статический /<route>/index.html — отдаём его
+# (краулеры видят уникальные мета-теги до того как загрузится JS)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI}/index.html -f
+RewriteRule ^(.+?)/?$ /$1/index.html [L]
+
+# SPA fallback - everything else to index.html
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+</IfModule>
+
+# HTML страницы не кешируем (чтобы prerender обновлялся при деплое)
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json image/svg+xml font/woff font/woff2
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 month"
+  ExpiresByType image/png "access plus 1 month"
+  ExpiresByType image/webp "access plus 1 month"
+  ExpiresByType image/svg+xml "access plus 1 month"
+  ExpiresByType font/woff "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+</IfModule>

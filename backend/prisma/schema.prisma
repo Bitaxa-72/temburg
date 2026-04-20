@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  role      String   @default("USER")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  bookings Booking[]
+
+  @@map("users")
+}
+
+model Booking {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  serviceType String   @map("service_type")
+  serviceName String   @map("service_name")
+  date        DateTime
+  time        String
+  guests      Int      @default(1)
+  duration    Int?
+  totalPrice  Decimal  @map("total_price") @db.Decimal(10, 2)
+  notes       String?
+  status      String   @default("PENDING")
+  isExported  Boolean  @default(false) @map("is_exported")
+  exportedAt  DateTime? @map("exported_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user    User     @relation(fields: [userId], references: [id])
+  payment Payment?
+
+  @@index([isExported, status])
+  @@map("bookings")
+}
+
+model Payment {
+  id         String   @id @default(uuid())
+  bookingId  String   @unique @map("booking_id")
+  amount     Decimal  @db.Decimal(10, 2)
+  currency   String   @default("RUB")
+  status     String   @default("PENDING")
+  yookassaId String?  @unique @map("yookassa_id")
+  paymentUrl String?  @map("payment_url")
+  paidAt     DateTime? @map("paid_at")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@map("payments")
+}

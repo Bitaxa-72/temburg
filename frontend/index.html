@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Термбург — термальный комплекс в Москве. Более 12 парных, 2 бассейна, джакузи, SPA-процедуры, массаж. От 540 ₽/час. Ежедневно 9:00–23:00. м. Печатники, ул. Гурьянова 30." />
+    <!-- Inter подключаем через системный fallback в CSS (font-family: 'Inter', system-ui, sans-serif).
+         Локальные .woff2 файлы отсутствуют — раньше @font-face ссылался на /fonts/inter-*.woff2,
+         которые отдавали 404 HTML и ломались при парсинге как шрифт. Если потребуется
+         именно Inter — положить файлы в public/fonts/ и вернуть @font-face. -->
+
+    <title>Термбург — термальный комплекс, бани и сауны в Москве | 12 парных, бассейны, SPA</title>
+
+    <!-- SEO: canonical, OG tags, hreflang -->
+    <link rel="canonical" href="https://termburg.ru/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:site_name" content="Термбург" />
+    <meta property="og:title" content="Термбург — термальный комплекс, бани и сауны в Москве" />
+    <meta property="og:description" content="Более 12 парных, 2 бассейна, джакузи, SPA-процедуры, массаж. От 540 ₽/час. Ежедневно 9:00–23:00. м. Печатники." />
+    <meta property="og:image" content="https://termburg.ru/images/og-default.jpg" />
+    <meta property="og:url" content="https://termburg.ru/" />
+    <link rel="alternate" hreflang="ru" href="https://termburg.ru/" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Термбург — термальный комплекс, бани и сауны в Москве" />
+    <meta name="twitter:description" content="Более 12 парных, 2 бассейна, джакузи, SPA-процедуры, массаж. От 540 ₽/час." />
+    <meta name="twitter:image" content="https://termburg.ru/images/og-default.jpg" />
+
+    <!-- PWA -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon.ico" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1E1A2E" />
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "HealthAndBeautyBusiness",
+      "name": "Термбург",
+      "description": "Термальный комплекс в Москве. Бани, сауны, парения, SPA-процедуры, массаж.",
+      "url": "https://termburg.ru",
+      "telephone": "+7 (495) 191-64-38",
+      "email": "info@termburg.ru",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "ул. Гурьянова, д. 30, 2 этаж",
+        "addressLocality": "Москва",
+        "addressCountry": "RU"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": "55.6897",
+        "longitude": "37.7273"
+      },
+      "openingHours": "Mo-Su 09:00-23:00",
+      "priceRange": "₽₽",
+      "image": "https://termburg.ru/images/og-default.jpg",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.9",
+        "reviewCount": "1732"
+      }
+    }
+    </script>
+
+    <!-- FAQ Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {"@type": "Question", "name": "Что взять с собой?", "acceptedAnswer": {"@type": "Answer", "text": "Полотенца, тапочки и шапку мы предоставляем. С собой — купальник/плавки, сменное бельё."}},
+        {"@type": "Question", "name": "Есть ли возрастные ограничения?", "acceptedAnswer": {"@type": "Answer", "text": "Дети до 6 лет включительно — 470 руб безлимит. До 14 лет только в сопровождении взрослых."}},
+        {"@type": "Question", "name": "Какие способы оплаты?", "acceptedAnswer": {"@type": "Answer", "text": "Наличные, банковские карты, СБП, онлайн через ЮKassa."}},
+        {"@type": "Question", "name": "Есть ли парковка?", "acceptedAnswer": {"@type": "Answer", "text": "Да, бесплатная парковка на территории ТЦ Серф Плаза."}}
+      ]
+    }
+    </script>
+
+    <!-- Yandex.Metrika counter -->
+    <script type="text/javascript">
+      (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+      m[i].l=1*new Date();
+      for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+      k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+      (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+      ym(94841988, "init", {
+        clickmap:true,
+        trackLinks:true,
+        accurateTrackBounce:true,
+        webvisor:true
+      });
+    </script>
+
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GT-KVH2PMC"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'GT-KVH2PMC');
+    </script>
+
+    <!-- Mail.ru Counter -->
+    <script type="text/javascript">
+      var _tmr = window._tmr || (window._tmr = []);
+      _tmr.push({id: "3730660", type: "pageView", start: (new Date()).getTime()});
+      (function (d, w, id) {
+        if (d.getElementById(id)) return;
+        var ts = d.createElement("script"); ts.type = "text/javascript"; ts.async = true; ts.id = id;
+        ts.src = "https://top-fwz1.mail.ru/js/code.js";
+        var f = function () {var s = d.getElementsByTagName("script")[0]; s.parentNode.insertBefore(ts, s);};
+        if (w.opera == "[object Opera]") { d.addEventListener("DOMContentLoaded", f, false); } else { f(); }
+      })(document, window, "tmr-code");
+    </script>
+  </head>
+  <body>
+    <noscript><div><img src="https://mc.yandex.ru/watch/94841988" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+
+    <!-- SEO: Static content for search engines that don't execute JavaScript -->
+    <noscript>
+      <div id="seo-content">
+        <header>
+          <h1>Термбург — термальный комплекс в Москве</h1>
+          <p>Термальный комплекс для всей семьи в районе Печатники. Бани, сауны, парения, SPA-процедуры, массаж, бассейны.</p>
+          <nav>
+            <a href="/about">О комплексе</a>
+            <a href="/steam-rooms">Парные</a>
+            <a href="/pools">Бассейны</a>
+            <a href="/jacuzzi">Джакузи</a>
+            <a href="/services">Услуги</a>
+            <a href="/pricing">Прайс-лист</a>
+            <a href="/schedule">Расписание</a>
+            <a href="/promotions">Акции</a>
+            <a href="/news">Новости</a>
+            <a href="/cafe">Кафе</a>
+            <a href="/gallery">Галерея</a>
+            <a href="/termliny">Термлины</a>
+            <a href="/contacts">Контакты</a>
+            <a href="/faq">Частые вопросы</a>
+            <a href="/careers">Вакансии</a>
+            <a href="/family">Семейный отдых</a>
+            <a href="/corporate">Корпоративный отдых</a>
+            <a href="/swimming-school">Школа плавания</a>
+            <a href="/steam-school">Школа парения</a>
+            <a href="/map">Карта комплекса</a>
+          </nav>
+        </header>
+
+        <main>
+          <section>
+            <h2>Термальный комплекс Термбург</h2>
+            <p>Термбург — это более 10 видов парных, 2 бассейна, джакузи и купели, SPA-процедуры и массаж в самом сердце Москвы. Ежедневно с 9:00 до 23:00.</p>
+            <p>Адрес: г. Москва, ул. Гурьянова, д. 30, 2 этаж (Серф Плаза), м. Печатники</p>
+            <p>Телефон: <a href="tel:+74951916438">+7 (495) 191-64-38</a></p>
+          </section>
+
+          <section>
+            <h2>Наши парные</h2>
+            <ul>
+              <li><strong>Русская парная</strong> — классическая баня с берёзовыми и дубовыми вениками, 80-100°C</li>
+              <li><strong>Сибирская парная</strong> — мощная жаровая баня по сибирской традиции, 90-110°C</li>
+              <li><strong>Травяная парная</strong> — ароматная парная с настоями целебных трав, 55-65°C</li>
+              <li><strong>Хаммам</strong> — турецкая парильня с мраморными лежаками, 45-50°C</li>
+              <li><strong>Шаманская сауна</strong> — медитативная атмосфера с ароматами тайги, 70-85°C</li>
+              <li><strong>Деревенская баня</strong> — аутентичная баня по-чёрному, 80-90°C</li>
+              <li><strong>Бани-бочки</strong> — кедровые бочки на открытой террасе, 60-80°C</li>
+              <li><strong>Песчаная сауна</strong> — тёплый кварцевый песок для расслабления, 50-60°C</li>
+              <li><strong>Соляная сауна</strong> — стены из гималайской соли, галотерапия, 55-65°C</li>
+              <li><strong>Липовая парная</strong> — мягкий хвойный аромат, 60-75°C</li>
+              <li><strong>Мультикаменная парная</strong> — различные виды камней для уникального пара, 70-85°C</li>
+              <li><strong>Бани индивидуального парения</strong> — приватные бани для персонального парения</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Бассейны и купели</h2>
+            <ul>
+              <li><strong>Большой бассейн</strong> — 25 метров, подогреваемая вода 28-30°C</li>
+              <li><strong>Детский бассейн</strong> — безопасная зона для детей, 30-32°C</li>
+              <li><strong>Уличная купель</strong> — под открытым небом, 34-36°C</li>
+              <li><strong>Джакузи</strong> — гидромассажные ванны с подогревом</li>
+              <li><strong>Холодная купель</strong> — для контрастных процедур, 10-12°C</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Услуги и SPA</h2>
+            <p>Индивидуальные парения с профессиональными банщиками, классический и спортивный массаж, SPA-процедуры: пилинг, обёртывания, хаммам-ритуалы.</p>
+            <p>Школа парения — обучение искусству банного парения.</p>
+            <p>Школа плавания для детей 6-12 лет.</p>
+          </section>
+
+          <section>
+            <h2>Прайс-лист</h2>
+            <h3>Будние дни</h3>
+            <ul>
+              <li>1 час — 540 ₽ (взрослый)</li>
+              <li>2 часа — 1 000 ₽</li>
+              <li>3 часа — 1 500 ₽</li>
+              <li>4 часа — 1 990 ₽</li>
+              <li>Безлимит на день — 2 500 ₽</li>
+            </ul>
+            <h3>Выходные дни</h3>
+            <ul>
+              <li>1 час — 760 ₽ (взрослый)</li>
+              <li>2 часа — 1 450 ₽</li>
+              <li>3 часа — 2 150 ₽</li>
+              <li>4 часа — 2 850 ₽</li>
+              <li>Безлимит на день — 3 250 ₽</li>
+            </ul>
+            <p>Дети до 6 лет включительно — 470 ₽ безлимит</p>
+            <p>Скидка пенсионерам, студентам, именинникам</p>
+          </section>
+
+          <section>
+            <h2>Расписание</h2>
+            <ul>
+              <li>Бесплатное коллективное парение — 11:00, 17:00 ежедневно</li>
+              <li>Платное коллективное парение — 14:00, 20:00 ежедневно (450 ₽)</li>
+              <li>Йога — вторник 10:00, четверг 12:00</li>
+              <li>Аквааэробика — понедельник, среда, пятница 10:00</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Акции</h2>
+            <ul>
+              <li>Скидка студентам 30% после 16:00 в будни</li>
+              <li>Скидка пенсионерам 50% по вторникам</li>
+              <li>Бесплатный вход имениннику</li>
+              <li>Кофе в подарок при покупке SPA-услуги</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Контакты</h2>
+            <p>Адрес: г. Москва, ул. Гурьянова, д. 30, 2 этаж (ТЦ Серф Плаза)</p>
+            <p>Метро: Печатники</p>
+            <p>Телефон: <a href="tel:+74951916438">+7 (495) 191-64-38</a></p>
+            <p>Email: <a href="mailto:info@termburg.ru">info@termburg.ru</a></p>
+            <p>Режим работы: ежедневно с 9:00 до 23:00 (первый понедельник месяца — санитарный день)</p>
+            <p><a href="https://vk.com/termburg">ВКонтакте</a> | <a href="https://t.me/termburg">Telegram</a> | <a href="https://instagram.com/termburg">Instagram</a></p>
+          </section>
+
+          <section>
+            <h2>О Термбурге</h2>
+            <p>Термбург — термальный комплекс и семейный оздоровительный центр в Москве. Мы создали особенное место, где каждый гость может провести время с близкими, расслабиться и восстановить силы. Более 10 видов парных, бассейны, SPA-процедуры и массаж, кафе — всё для вашего отдыха.</p>
+            <p>У каждой бани Термбурга есть свой дух-хранитель — Термлин. Банник Яромир, Валькирия, Домовой Переслав, Дворовой Казимир, Кот Ведагор, Кот Милован и Берегиня Леля — познакомьтесь с ними на странице Термлинов.</p>
+          </section>
+
+          <section>
+            <h2>Часто задаваемые вопросы</h2>
+            <dl>
+              <dt>Что взять с собой?</dt>
+              <dd>Полотенца, тапочки и шапку мы предоставляем. С собой — купальник/плавки, сменное бельё.</dd>
+              <dt>Есть ли возрастные ограничения?</dt>
+              <dd>Дети до 6 лет включительно — 470 ₽ безлимит. До 14 лет только в сопровождении взрослых.</dd>
+              <dt>Какие способы оплаты?</dt>
+              <dd>Наличные, банковские карты, СБП, онлайн через ЮKassa.</dd>
+              <dt>Есть ли парковка?</dt>
+              <dd>Да, бесплатная парковка на территории ТЦ Серф Плаза.</dd>
+            </dl>
+          </section>
+        </main>
+
+        <footer>
+          <p>&copy; 2025 Термбург — термальный комплекс. Все права защищены.</p>
+          <p><a href="/privacy">Политика конфиденциальности</a> | <a href="/offer">Публичная оферта</a> | <a href="/rules">Правила комплекса</a></p>
+        </footer>
+      </div>
+    </noscript>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

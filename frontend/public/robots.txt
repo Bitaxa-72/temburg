@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Sitemap: https://termburg.ru/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
+
+# Allow all resources for proper rendering
+Allow: /assets/
+Allow: /images/

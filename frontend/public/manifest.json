@@ -1,0 +1,17 @@
+{
+  "name": "Термбург — термальный комплекс",
+  "short_name": "Термбург",
+  "description": "Термальный комплекс в Москве. Бани, сауны, парения, SPA, массаж.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1E1A2E",
+  "theme_color": "#1E1A2E",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}
