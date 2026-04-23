@@ -9,10 +9,45 @@ import { useBooking } from '@/context/BookingContext';
 import { usePricing } from '@/hooks/useWordPressData';
 import { weekdayPricing, weekendPricing, subscriptions, pensionerPricing, childUnder6Price as fallbackChildUnder6 } from '@/data/pricing';
 
+function getLocalDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const PricingPreviewSection = memo(function PricingPreviewSection() {
   const { openBooking, openPurchase, openWhatToBring } = useBooking();
   const { data: wpPricing } = usePricing();
+  const weekdaySlots = wpPricing.weekday.length > 0
+    ? wpPricing.weekday.map((slot) => ({ ...slot, id: String(slot.id) }))
+    : weekdayPricing;
+  const weekendSlots = wpPricing.weekend.length > 0
+    ? wpPricing.weekend.map((slot) => ({ ...slot, id: String(slot.id) }))
+    : weekendPricing;
+  const pensionerSlots = wpPricing.pensioner && wpPricing.pensioner.length > 0
+    ? wpPricing.pensioner.map((slot) => ({ ...slot, id: String(slot.id) }))
+    : pensionerPricing;
+  const subscriptionSlots = wpPricing.subscriptions.length > 0
+    ? wpPricing.subscriptions.slice(0, 4).map((slot) => ({
+        id: String(slot.id),
+        name: slot.name,
+        adultPrice: slot.adultPrice,
+        discount: slot.discount ?? 0,
+        description: slot.description ?? '',
+      }))
+    : subscriptions.slice(0, 4);
   const childUnder6Price = wpPricing.childUnder6 ?? fallbackChildUnder6;
+  const today = getLocalDateString();
+  const specialWeekendDates = Array.isArray(wpPricing.specialWeekendDates) ? wpPricing.specialWeekendDates : [];
+  const isSpecialWeekendToday = specialWeekendDates.includes(today);
+  const displayWeekdaySlots = isSpecialWeekendToday ? weekendSlots : weekdaySlots;
+  const weekdayColumnTitle = isSpecialWeekendToday ? 'Сегодня действует тариф выходного дня' : 'Будни';
+  const weekdayPurchasePrefix = isSpecialWeekendToday ? 'Праздники' : 'Будни';
+  const pricingHint = isSpecialWeekendToday
+    ? 'Сегодня для дневных тарифов действует цена выходного или праздничного дня.'
+    : 'Пятница: до 16:00 — тариф будней, после 16:00 — тариф выходных';
 
   return (
     <Section
@@ -27,16 +62,16 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
           {/* Weekdays */}
           <div className="rounded-2xl border border-border overflow-hidden bg-surface">
             <div className="bg-background px-6 py-3 border-b border-border">
-              <h3 className="font-heading text-lg font-bold text-text-primary text-center">Будни</h3>
+              <h3 className="font-heading text-lg font-bold text-text-primary text-center">{weekdayColumnTitle}</h3>
             </div>
             <div className="divide-y divide-border/50">
-              {weekdayPricing.map((slot) => (
+              {displayWeekdaySlots.map((slot) => (
                 <div
                   key={slot.id}
                   className="flex items-center justify-between px-6 py-3 cursor-pointer hover:bg-surface-warm transition-colors"
                   role="button"
                   tabIndex={0}
-                  onClick={() => openPurchase({ name: `Будни — ${slot.name}`, price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽`, childPrice: `${slot.childPrice.toLocaleString('ru-RU')} ₽` })}
+                  onClick={() => openPurchase({ name: `${weekdayPurchasePrefix} — ${slot.name}`, price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽`, childPrice: `${slot.childPrice.toLocaleString('ru-RU')} ₽` })}
                 >
                   <span className="text-text-primary">{slot.name}</span>
                   <span className="text-primary font-bold">{slot.adultPrice.toLocaleString('ru-RU')}₽</span>
@@ -51,7 +86,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
               <h3 className="font-heading text-lg font-bold text-accent text-center">Выходные / Праздники</h3>
             </div>
             <div className="divide-y divide-border/50">
-              {weekendPricing.map((slot) => (
+              {weekendSlots.map((slot) => (
                 <div
                   key={slot.id}
                   className="flex items-center justify-between px-6 py-3 cursor-pointer hover:bg-accent/5 transition-colors"
@@ -69,7 +104,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
 
         {/* Примечание про пятницу */}
         <p className="text-xs text-text-secondary/70 text-center mb-8 -mt-4">
-          Пятница: до 16:00 — тариф будней, после 16:00 — тариф выходных
+          {pricingHint}
         </p>
 
         {/* Льготные тарифы и дети */}
@@ -96,7 +131,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
               <h4 className="font-bold text-text-primary">Льготы для пенсионеров</h4>
             </div>
             <div className="space-y-1.5 text-sm text-text-secondary">
-              {pensionerPricing.map((p) => (
+              {pensionerSlots.map((p) => (
                 <p key={p.id}>{p.name} — <strong className="text-primary">{p.price.toLocaleString('ru-RU')} ₽</strong></p>
               ))}
               <p className="text-xs text-text-secondary/70 pt-1">Пн–Чт, до 18:00 (билет до 16:00)</p>
@@ -111,7 +146,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
             <h3 className="font-heading text-xl font-bold text-text-primary">Абонементы</h3>
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
-            {subscriptions.slice(0, 4).map((sub) => (
+            {subscriptionSlots.map((sub) => (
               <div
                 key={sub.id}
                 className="rounded-xl bg-surface border border-border px-5 py-4 hover:border-primary/40 hover:shadow-md transition-all cursor-pointer"

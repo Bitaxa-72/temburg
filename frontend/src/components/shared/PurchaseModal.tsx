@@ -32,6 +32,10 @@ function isFriday(dateStr: string) {
   return d.getDay() === 5;
 }
 
+function isSpecialWeekendDate(dateStr: string, specialWeekendDates: Set<string>) {
+  return dateStr !== '' && specialWeekendDates.has(dateStr);
+}
+
 function getTomorrow() {
   const d = new Date();
   d.setDate(d.getDate() + 1);
@@ -95,6 +99,10 @@ export default function PurchaseModal() {
   }, []);
   const weekdayPricing: PricingSlot[] = wpPricing?.weekday || localWeekdayPricing;
   const weekendPricing: PricingSlot[] = wpPricing?.weekend || localWeekendPricing;
+  const specialWeekendDates = useMemo(
+    () => new Set<string>(Array.isArray(wpPricing?.specialWeekendDates) ? wpPricing.specialWeekendDates : []),
+    [wpPricing]
+  );
   const [step, setStep] = useState<'form' | 'processing' | 'success' | 'register' | 'error'>('form');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -142,7 +150,9 @@ export default function PurchaseModal() {
   // Расчёт стоимости входного билета
   const ticketPrice = useMemo(() => {
     if (!addTicket || !ticketDate) return 0;
-    const useWeekendPricing = isWeekend(ticketDate) || (isFriday(ticketDate) && fridayTime === 'after16');
+    const useWeekendPricing = isSpecialWeekendDate(ticketDate, specialWeekendDates)
+      || isWeekend(ticketDate)
+      || (isFriday(ticketDate) && fridayTime === 'after16');
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     const nameMap: Record<string, string> = {
       '1h': '1 час',
@@ -153,7 +163,7 @@ export default function PurchaseModal() {
     };
     const slot = pricing.find((s) => s.name === nameMap[ticketTariff]);
     return slot?.adultPrice ?? 0;
-  }, [addTicket, ticketDate, ticketTariff, fridayTime]);
+  }, [addTicket, ticketDate, ticketTariff, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing]);
 
   // Стоимость детского билета
   const childPrice = useMemo(() => {
@@ -541,7 +551,7 @@ export default function PurchaseModal() {
                     </div>
 
                     {/* Пятница: до/после 16:00 */}
-                    {ticketDate && isFriday(ticketDate) && (
+                    {ticketDate && isFriday(ticketDate) && !isSpecialWeekendDate(ticketDate, specialWeekendDates) && (
                       <div>
                         <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-800">
                           <Clock className="w-3.5 h-3.5" />

@@ -3,7 +3,7 @@
  * Fetches data from WordPress REST API
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://termburg.ceosivaev.ru/wp-json/termburg/v1';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://termburg.ru/wp-json/termburg/v1';
 
 // Types matching WordPress API responses
 export interface WPPricingItem {
@@ -16,13 +16,27 @@ export interface WPPricingItem {
   description?: string;
 }
 
+export interface WPDiscountPricingItem {
+  id: number;
+  name: string;
+  duration: string;
+  price: number;
+}
+
+export interface WPSpecialWeekendDate {
+  date: string;
+  label: string;
+}
+
 export interface WPPricingResponse {
   weekday: WPPricingItem[];
   weekend: WPPricingItem[];
   subscriptions: WPPricingItem[];
   certificates: WPPricingItem[];
   childUnder6?: number;
-  pensioner?: WPPricingItem[];
+  pensioner?: WPDiscountPricingItem[];
+  specialWeekendDates?: string[];
+  specialWeekendDateDetails?: WPSpecialWeekendDate[];
   overtime?: { type: string; ratePerMin: number }[];
 }
 

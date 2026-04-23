@@ -213,6 +213,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
   const selectedPhotoData = filteredPhotos.find(p => p.id === selectedPhoto) || filteredPhotos[0];
   const selectedHolidayData = certificateHolidays.find(h => h.id === selectedHoliday) || certificateHolidays[0];
   const selectedColorData = certificateColors.find(c => c.id === selectedColor) || certificateColors[0];
+  const [hasCertificatePhotoError, setHasCertificatePhotoError] = useState(false);
 
   useEffect(() => {
     const isPhotoValid = filteredPhotos.some(p => p.id === selectedPhoto) || selectedPhoto === 'custom';
@@ -220,6 +221,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
       setSelectedPhoto(filteredPhotos[0].id);
     }
   }, [selectedHoliday, filteredPhotos, selectedPhoto]);
+
 
   // Рендерим реальный Code128 штрихкод в SVG ref'е
   useEffect(() => {
@@ -281,6 +283,10 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
     }
     return selectedPhotoData.src;
   };
+  const certificatePhoto = getCertificatePhoto();
+  useEffect(() => {
+    setHasCertificatePhotoError(false);
+  }, [certificatePhoto]);
   const holidayCarouselRef = useRef<HTMLDivElement>(null);
   const photoCarouselRef = useRef<HTMLDivElement>(null);
 
@@ -750,13 +756,16 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                         <p className="text-primary font-semibold">termburg.ru</p>
                       </div>
                     </div>
-                    <div className="w-[52%] absolute right-0 inset-y-0">
-                      <img
-                        src={getCertificatePhoto()}
-                        alt={getHolidayLabel()}
-                        className="w-full h-full object-cover object-top"
-                        style={selectedPhoto === 'custom' ? { objectPosition: `${photoPosition.x}% ${photoPosition.y}%` } : undefined}
-                      />
+                    <div className={`w-[52%] absolute right-0 inset-y-0 ${hasCertificatePhotoError ? `bg-gradient-to-br ${selectedColorData.bgClass}` : ''}`}>
+                      {!hasCertificatePhotoError && certificatePhoto ? (
+                        <img
+                          src={certificatePhoto}
+                          alt={getHolidayLabel()}
+                          className="w-full h-full object-cover object-top"
+                          style={selectedPhoto === 'custom' ? { objectPosition: `${photoPosition.x}% ${photoPosition.y}%` } : undefined}
+                          onError={() => setHasCertificatePhotoError(true)}
+                        />
+                      ) : null}
                     </div>
                   </div>
                 </div>
