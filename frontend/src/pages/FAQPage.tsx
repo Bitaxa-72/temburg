@@ -106,6 +106,20 @@ const categoryIcons: Record<string, typeof HelpCircle> = {
   'Посещение': Clock,
 };
 
+const quickCardIcons: Record<string, typeof Clock> = {
+  clock: Clock,
+  ticket: CreditCard,
+  users: Users,
+  map: MapPin,
+};
+
+const fallbackQuickCards = [
+  { icon: 'clock', title: 'Время работы', text: 'Ежедневно 9:00 — 23:00' },
+  { icon: 'ticket', title: 'Билеты', text: 'от 540 ₽ / 1 час' },
+  { icon: 'users', title: 'Дети', text: 'до 1 года бесплатно' },
+  { icon: 'map', title: 'Адрес', text: 'м. Печатники, 10 мин' },
+];
+
 interface AccordionItemProps {
   item: FAQItem;
   isOpen: boolean;
@@ -152,6 +166,9 @@ export default function FAQPage() {
   // Fetch FAQ from WordPress API
   const { data: faqResponse, loading } = useFAQ();
   const { data: settings } = useSettings();
+  const pageTitle = faqResponse.title || 'Вопросы и ответы';
+  const pageDescription = faqResponse.description || 'Всё, что нужно знать перед посещением Термбурга';
+  const quickCards = faqResponse.quickCards?.length ? faqResponse.quickCards : fallbackQuickCards;
 
   const handleToggle = (key: string) => {
     setOpenIndex(openIndex === key ? null : key);
@@ -216,8 +233,8 @@ export default function FAQPage() {
       schema={[faqSchema, breadcrumbSchema]}
     >
       <PageHero
-        title="Вопросы и ответы"
-        subtitle="Всё, что нужно знать перед посещением Термбурга"
+        title={pageTitle}
+        subtitle={pageDescription}
         backgroundImage="/images/heroes/faq.webp"
       />
       {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
@@ -225,26 +242,16 @@ export default function FAQPage() {
       {/* Quick Info Cards */}
       <Section warm>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="rounded-2xl bg-surface border border-border/50 p-5 text-center">
-            <Clock className="w-8 h-8 text-primary mx-auto mb-3" />
-            <h3 className="font-bold text-text-primary mb-1">Время работы</h3>
-            <p className="text-sm text-text-secondary">Ежедневно 9:00 — 23:00</p>
-          </div>
-          <div className="rounded-2xl bg-surface border border-border/50 p-5 text-center">
-            <CreditCard className="w-8 h-8 text-primary mx-auto mb-3" />
-            <h3 className="font-bold text-text-primary mb-1">Билеты</h3>
-            <p className="text-sm text-text-secondary">от 540 ₽ / 1 час</p>
-          </div>
-          <div className="rounded-2xl bg-surface border border-border/50 p-5 text-center">
-            <Users className="w-8 h-8 text-primary mx-auto mb-3" />
-            <h3 className="font-bold text-text-primary mb-1">Дети</h3>
-            <p className="text-sm text-text-secondary">до 1 года бесплатно</p>
-          </div>
-          <div className="rounded-2xl bg-surface border border-border/50 p-5 text-center">
-            <MapPin className="w-8 h-8 text-primary mx-auto mb-3" />
-            <h3 className="font-bold text-text-primary mb-1">Адрес</h3>
-            <p className="text-sm text-text-secondary">м. Печатники, 10 мин</p>
-          </div>
+          {quickCards.map((card) => {
+            const Icon = quickCardIcons[card.icon] || Clock;
+            return (
+              <div key={`${card.icon}-${card.title}`} className="rounded-2xl bg-surface border border-border/50 p-5 text-center">
+                <Icon className="w-8 h-8 text-primary mx-auto mb-3" />
+                <h3 className="font-bold text-text-primary mb-1">{card.title}</h3>
+                <p className="text-sm text-text-secondary">{card.text}</p>
+              </div>
+            );
+          })}
         </div>
       </Section>
 

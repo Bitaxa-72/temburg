@@ -7,6 +7,7 @@ export interface ScheduleEvent {
   type: 'free' | 'paid' | 'special';
   description: string;
   instructor?: string;
+  location?: string;
   price?: number;
   purchaseUrl?: string;
   highlight?: boolean;

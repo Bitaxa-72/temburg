@@ -153,6 +153,7 @@ function termburg_register_field_groups() {
                     array( 'key' => 'field_se_price','label' => 'Цена',          'name' => 'price',    'type' => 'number' ),
                     array( 'key' => 'field_se_desc', 'label' => 'Описание',      'name' => 'description', 'type' => 'textarea' ),
                     array( 'key' => 'field_se_loc',  'label' => 'Локация',       'name' => 'location', 'type' => 'text' ),
+                    array( 'key' => 'field_se_instructor', 'label' => 'Ведущий / инструктор', 'name' => 'instructor', 'type' => 'text' ),
                     array( 'key' => 'field_se_hl',   'label' => 'Выделить?',     'name' => 'highlight','type' => 'true_false' ),
                 ) ),
         ),
@@ -338,25 +339,68 @@ function termburg_api_faq() {
 
 /* ── Schedule ── */
 function termburg_api_schedule() {
-    $count = intval( get_option( 'options_tb_schedule_events' ) );
-    if ( $count < 1 ) {
-        return rest_ensure_response( array() );
-    }
     $out = array();
+
+    $rows = function_exists( 'get_field' ) ? get_field( 'tb_schedule_events', 'option' ) : array();
+    if ( is_array( $rows ) && ! empty( $rows ) ) {
+        foreach ( $rows as $i => $row ) {
+            $day_raw = $row['day'] ?? '';
+            $days = is_array( $day_raw )
+                ? array_values( array_filter( array_map( 'trim', $day_raw ) ) )
+                : array_values( array_filter( array_map( 'trim', explode( ',', $day_raw ) ) ) );
+            $type = $row['type'] ?? 'free';
+            $ev_price = $row['price'] ?? '';
+
+            $out[] = array(
+                'id'          => $i + 1,
+                'name'        => $row['name'] ?? '',
+                'title'       => $row['name'] ?? '',
+                'time'        => $row['time'] ?? '',
+                'duration'    => $row['duration'] ?? '',
+                'day'         => $days,
+                'weekdays'    => $days,
+                'type'        => $type,
+                'description' => $row['description'] ?? '',
+                'location'    => $row['location'] ?? '',
+                'instructor'  => $row['instructor'] ?? '',
+                'price'       => $ev_price !== '' ? intval( $ev_price ) : null,
+                'isFree'      => $type === 'free',
+                'highlight'   => ! empty( $row['highlight'] ),
+            );
+        }
+        return rest_ensure_response( $out );
+    }
+
+    $count = intval( get_option( 'options_tb_schedule_events' ) );
     for ( $i = 0; $i < $count; $i++ ) {
-        $day_raw = get_option( "options_tb_schedule_events_{$i}_tb_ev_day" ) ?: '';
-        $days = array_map( 'trim', explode( ',', $day_raw ) );
+        $get = function ( $key, $legacy_key = null ) use ( $i ) {
+            $value = get_option( "options_tb_schedule_events_{$i}_{$key}" );
+            if ( ( $value === false || $value === '' ) && $legacy_key ) {
+                $value = get_option( "options_tb_schedule_events_{$i}_{$legacy_key}" );
+            }
+            return $value === false ? '' : $value;
+        };
+
+        $day_raw = $get( 'day', 'tb_ev_day' );
+        $days = array_values( array_filter( array_map( 'trim', explode( ',', $day_raw ) ) ) );
+        $type = $get( 'type', 'tb_ev_type' ) ?: 'free';
+        $ev_price = $get( 'price', 'tb_ev_price' );
         $ev = array(
             'id'          => $i + 1,
-            'name'        => get_option( "options_tb_schedule_events_{$i}_tb_ev_name" ) ?: '',
-            'time'        => get_option( "options_tb_schedule_events_{$i}_tb_ev_time" ) ?: '',
-            'duration'    => get_option( "options_tb_schedule_events_{$i}_tb_ev_dur" ) ?: '',
+            'name'        => $get( 'name', 'tb_ev_name' ),
+            'title'       => $get( 'name', 'tb_ev_name' ),
+            'time'        => $get( 'time', 'tb_ev_time' ),
+            'duration'    => $get( 'duration', 'tb_ev_dur' ),
             'day'         => $days,
-            'type'        => get_option( "options_tb_schedule_events_{$i}_tb_ev_type" ) ?: 'free',
-            'description' => get_option( "options_tb_schedule_events_{$i}_tb_ev_desc" ) ?: '',
+            'weekdays'    => $days,
+            'type'        => $type,
+            'description' => $get( 'description', 'tb_ev_desc' ),
+            'location'    => $get( 'location', 'tb_ev_loc' ),
+            'instructor'  => $get( 'instructor', 'tb_ev_instructor' ),
+            'price'       => $ev_price !== '' ? intval( $ev_price ) : null,
+            'isFree'      => $type === 'free',
+            'highlight'   => ! empty( $get( 'highlight', 'tb_ev_hl' ) ),
         );
-        $ev_price = get_option( "options_tb_schedule_events_{$i}_tb_ev_price" ) ?: '';
-        if ( ! empty( $ev_price ) ) $ev['price'] = intval( $ev_price );
         $out[] = $ev;
     }
     return rest_ensure_response( $out );

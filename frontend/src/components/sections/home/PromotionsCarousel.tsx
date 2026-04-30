@@ -10,13 +10,25 @@ export default function PromotionsCarousel() {
   const [wpPromotions, setWpPromotions] = useState<any[] | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch('/wp-json/termburg/v1/promotions')
+    fetch('/wp-json/termburg/v1/promotions-data')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (!cancelled && Array.isArray(data) && data.length > 0) setWpPromotions(data); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
-  const promotions = wpPromotions || localPromotions;
+  const promotions = wpPromotions
+    ? wpPromotions.map((promo, index) => {
+        const fallback = localPromotions[index % localPromotions.length];
+
+        return {
+          ...promo,
+          discount: promo.discount ?? undefined,
+          validUntil: promo.validUntil ?? undefined,
+          badge: promo.badge || fallback.badge,
+          banner: promo.banner || fallback.banner,
+        };
+      })
+    : localPromotions;
 
   return (
     <Section

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { termliny as localTermliny } from '@/data/termliny';
 import { shuffleWishes } from '@/data/wishes';
+import { useHero, useTermliny } from '@/hooks/useWordPressData';
+import type { WPHeroSlide } from '@/api/wordpress';
 
 const INTERVAL = 6000;
 
@@ -11,40 +13,59 @@ function getTermlinShortName(index: number): string {
   return names[index] || 'Термбурга';
 }
 
+function hasSlideContent(slide: WPHeroSlide): boolean {
+  return Boolean(
+    slide.label?.trim() ||
+    slide.title?.trim() ||
+    slide.text?.trim() ||
+    slide.author?.trim() ||
+    slide.image?.trim()
+  );
+}
+
+function formatAuthor(author: string): string {
+  const clean = author.trim();
+  if (!clean) return '';
+  return clean.startsWith('—') ? clean : `— ${clean}`;
+}
+
 export default function HeroCarousel() {
   const [current, setCurrent] = useState(0);
+  const { data: hero } = useHero();
 
-  // WP termliny data with local fallback
-  const [wpTermliny, setWpTermliny] = useState<any[] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/wp-json/termburg/v1/termliny')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (!cancelled && Array.isArray(data) && data.length > 0) setWpTermliny(data); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-  const termliny = wpTermliny || localTermliny;
+  const { data: termliny } = useTermliny();
 
   // Перемешиваем пожелания один раз при монтировании
   const shuffledWishes = useMemo(() => shuffleWishes(), []);
+  const adminSlides = useMemo(
+    () => (hero.slides || []).filter(hasSlideContent),
+    [hero.slides]
+  );
+  const slideCount = adminSlides.length > 0 ? adminSlides.length : shuffledWishes.length;
 
   const next = useCallback(() => {
-    setCurrent((prev) => (prev + 1) % shuffledWishes.length);
-  }, [shuffledWishes.length]);
+    setCurrent((prev) => (prev + 1) % slideCount);
+  }, [slideCount]);
 
   const prev = useCallback(() => {
-    setCurrent((prev) => (prev - 1 + shuffledWishes.length) % shuffledWishes.length);
-  }, [shuffledWishes.length]);
+    setCurrent((prev) => (prev - 1 + slideCount) % slideCount);
+  }, [slideCount]);
 
   useEffect(() => {
     const timer = setInterval(next, INTERVAL);
     return () => clearInterval(timer);
   }, [next]);
 
-  const wish = shuffledWishes[current];
-  const termlin = termliny[wish.termlinIndex];
+  const wish = shuffledWishes[current % shuffledWishes.length];
+  const termlin = termliny[wish.termlinIndex] || localTermliny[wish.termlinIndex];
   const Icon = wish.icon;
+  const adminSlide = adminSlides.length > 0 ? adminSlides[current % adminSlides.length] : undefined;
+  const slideLabel = adminSlide?.label?.trim() || `Пожелание от ${getTermlinShortName(wish.termlinIndex)}`;
+  const slideTitle = adminSlide?.title?.trim() || wish.title;
+  const slideText = adminSlide?.text?.trim() || wish.description;
+  const slideAuthor = formatAuthor(adminSlide?.author?.trim() || termlin.name);
+  const slideImage = adminSlide?.image?.trim() || termlin.image;
+  const slideAlt = (adminSlide?.author?.trim() || termlin.name).replace(/^—\s*/, '');
 
   return (
     <div className="w-[400px]">
@@ -58,24 +79,24 @@ export default function HeroCarousel() {
                 <Icon className="w-5 h-5 text-primary" />
               </div>
               <p className="text-xs uppercase tracking-wider mb-1 text-primary truncate">
-                Пожелание от {getTermlinShortName(wish.termlinIndex)}
+                {slideLabel}
               </p>
               <h3 className="font-heading text-lg text-white font-bold mb-2 leading-tight line-clamp-2 min-h-[3rem]">
-                {wish.title}
+                {slideTitle}
               </h3>
               <p className="text-sm text-white/70 leading-relaxed line-clamp-3 min-h-[3.75rem]">
-                {wish.description}
+                {slideText}
               </p>
             </div>
-            <p className="text-xs text-white/40 truncate">— {termlin.name}</p>
+            <p className="text-xs text-white/40 truncate">{slideAuthor}</p>
           </div>
 
           {/* Right side - Termlin Image */}
           <div className="w-[168px] relative flex-shrink-0">
             <img
-              key={termlin.image}
-              src={termlin.image}
-              alt={termlin.name}
+              key={slideImage}
+              src={slideImage}
+              alt={slideAlt}
               className={`absolute inset-0 w-full h-full object-cover ${
                 wish.termlinIndex === 5 ? 'object-[10%_top]' : 'object-top'
               }`}

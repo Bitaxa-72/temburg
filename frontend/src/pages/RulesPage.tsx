@@ -44,6 +44,9 @@ export default function RulesPage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «rules» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('rules');
+  const hasPageBlocks = (pageContent?.blocks?.length || 0) > 0;
+  const pageTitle = pageContent?.title || 'Правила комплекса';
+  const pageDescription = pageContent?.metaDescription || 'Правила посещения термального комплекса Термбург: полный список требований безопасности, условий посещения и поведения гостей.';
 
   const [wpRules, setWpRules] = useState<any>(null);
   useEffect(() => {
@@ -84,15 +87,16 @@ export default function RulesPage() {
   let ruleNumber = 0;
 
   return (
-    <PageLayout title="Правила комплекса" description="Правила посещения термального комплекса Термбург — полный список из 137 пунктов.">
+    <PageLayout title={pageTitle} description={pageDescription}>
       <PageHero
-        title="Правила комплекса"
+        title={pageTitle}
         subtitle={`${totalRulesCount} пунктов для комфортного и безопасного отдыха`}
         backgroundImage="/images/heroes/faq.webp"
       />
-      {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
-
-      <Section>
+      {hasPageBlocks ? (
+        <WPContentBlocks blocks={pageContent.blocks} />
+      ) : (
+        <Section>
         <div className="max-w-4xl mx-auto">
           {/* Controls */}
           <div className="flex items-center justify-between mb-6">
@@ -193,7 +197,8 @@ export default function RulesPage() {
             </p>
           </div>
         </div>
-      </Section>
+        </Section>
+      )}
     </PageLayout>
   );
 }

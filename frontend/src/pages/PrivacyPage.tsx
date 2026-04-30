@@ -8,20 +8,24 @@ export default function PrivacyPage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «privacy» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('privacy');
+  const hasPageBlocks = (pageContent?.blocks?.length || 0) > 0;
+  const pageTitle = pageContent?.title || 'Политика конфиденциальности';
+  const pageDescription = pageContent?.metaDescription || 'Политика конфиденциальности термального комплекса Термбург. Обработка и защита персональных данных в соответствии с 152-ФЗ.';
 
   return (
     <PageLayout
-      title="Политика конфиденциальности"
-      description="Политика конфиденциальности термального комплекса Термбург. Обработка и защита персональных данных в соответствии с 152-ФЗ."
+      title={pageTitle}
+      description={pageDescription}
     >
       <PageHero
-        title="Политика конфиденциальности"
+        title={pageTitle}
         subtitle="Обработка и защита персональных данных"
         backgroundImage="/images/heroes/privacy.webp"
       />
-      {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
-
-      <Section>
+      {hasPageBlocks ? (
+        <WPContentBlocks blocks={pageContent.blocks} />
+      ) : (
+        <Section>
         <div className="max-w-4xl mx-auto">
           <p className="text-text-secondary leading-relaxed mb-8">
             Настоящая Политика конфиденциальности (далее — «Политика») определяет порядок обработки
@@ -405,7 +409,8 @@ export default function PrivacyPage() {
             </div>
           </div>
         </div>
-      </Section>
+        </Section>
+      )}
     </PageLayout>
   );
 }

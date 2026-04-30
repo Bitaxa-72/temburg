@@ -1,60 +1,16 @@
 import { useMemo } from 'react';
-import { Droplets, Thermometer, Sparkles, Users, CheckCircle, Loader2 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Droplets, Thermometer, Sparkles, Users, CheckCircle } from 'lucide-react';
 import PageLayout from '@/components/layout/PageLayout';
 import PageHero from '@/components/shared/PageHero';
 import Section from '@/components/ui/Section';
 import Container from '@/components/ui/Container';
-import Card from '@/components/ui/Card';
 import TicketButton from '@/components/ui/TicketButton';
 import { useBooking } from '@/context/BookingContext';
-import { useZones } from '@/hooks/useWordPressData';
-import { zoneCategories } from '@/data/zoneCategories';
-import { toAbsolutePath } from '@/data/imagePaths';
+import { useZonesData } from '@/hooks/useWordPressData';
 import { ZoneItemsGrid } from '@/components/zones/ZoneCards';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
-
-interface PoolType {
-  id: number;
-  name: string;
-  description: string;
-  temperature: string;
-  depth: string;
-  features: string[];
-  image: string;
-  icon: LucideIcon;
-}
-
-// Icon mapping by name keywords
-const iconMapPools: Record<string, LucideIcon> = {
-  'основн': Droplets,
-  'детск': Users,
-  'гидро': Sparkles,
-  'массаж': Sparkles,
-  'открыт': Thermometer,
-};
-
-function getIconForPool(name: string): LucideIcon {
-  const lowName = name.toLowerCase();
-  for (const [key, icon] of Object.entries(iconMapPools)) {
-    if (lowName.includes(key)) return icon;
-  }
-  return Droplets;
-}
-
-// Источник истины — zoneCategories (как на главной странице)
-const fallbackPools: PoolType[] =
-  (zoneCategories.find((c) => c.id === 'pools')?.items || []).map((item, idx) => ({
-    id: idx + 1,
-    name: item.name,
-    description: item.desc,
-    temperature: item.temp || '',
-    depth: '',
-    features: item.features || [],
-    image: toAbsolutePath(item.image),
-    icon: getIconForPool(item.name),
-  }));
+import { findZoneCategory, mapZonesDataToCategories } from '@/utils/zonesData';
 
 const features = [
   {
@@ -88,56 +44,6 @@ const advantages = [
   'Продажа полотенец и купальных принадлежностей',
 ];
 
-function PoolCard({ pool }: { pool: PoolType }) {
-  const Icon = pool.icon;
-
-  return (
-    <Card className="overflow-hidden hover:shadow-lg hover:shadow-primary/5 flex flex-col">
-      <div className="h-80 -m-6 mb-4 overflow-hidden">
-        <img
-          src={pool.image}
-          alt={pool.name}
-          className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-          loading="lazy"
-        />
-      </div>
-      <div className="flex items-start gap-3 mb-3">
-        <div className="rounded-lg bg-info/10 p-2 flex-shrink-0">
-          <Icon className="h-5 w-5 text-info" />
-        </div>
-        <div>
-          <h3 className="text-lg font-bold text-text-primary mb-1">{pool.name}</h3>
-          <p className="text-sm text-text-secondary">{pool.description}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-4 mb-4 text-sm">
-        <div className="flex items-center gap-1.5">
-          <Thermometer className="h-4 w-4 text-primary" />
-          <span className="text-text-secondary">
-            <span className="font-semibold text-text-primary">{pool.temperature}</span>
-          </span>
-        </div>
-        {pool.depth && (
-          <div className="flex items-center gap-1.5">
-            <Droplets className="h-4 w-4 text-info" />
-            <span className="text-text-secondary">
-              <span className="font-semibold text-text-primary">{pool.depth}</span>
-            </span>
-          </div>
-        )}
-      </div>
-      <ul className="space-y-2 flex-1">
-        {pool.features.map((feature) => (
-          <li key={feature} className="flex items-start gap-2">
-            <CheckCircle className="h-4 w-4 text-success flex-shrink-0 mt-0.5" />
-            <span className="text-sm text-text-secondary">{feature}</span>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
 function FeatureCard({ feature }: { feature: typeof features[0] }) {
   const Icon = feature.icon;
 
@@ -160,43 +66,9 @@ export default function PoolsPage() {
   const { data: pageContent } = usePageContent('pools');
 
   const { openBooking } = useBooking();
-  const { data: wpZones, loading } = useZones();
-
-  // Convert WordPress zones to local format
-  const pools = useMemo<PoolType[]>(() => {
-    const poolsCategory = wpZones?.pools;
-    if (poolsCategory?.items?.length) {
-      return poolsCategory.items.map((zone) => ({
-        id: zone.id,
-        name: zone.name,
-        description: zone.description,
-        temperature: zone.temperature,
-        depth: zone.humidity || '1.0 - 1.5 м', // humidity field stores depth for pools
-        features: zone.features || [],
-        image: (zone.image as string) || '/images/complex/pool.webp',
-        icon: getIconForPool(zone.name),
-      }));
-    }
-    return fallbackPools;
-  }, [wpZones]);
-
-  if (loading) {
-    return (
-      <PageLayout title="Бассейны" description="Комплекс бассейнов с чистой водой в Термбурге — плавание, гидромассаж и отдых для всей семьи.">
-        <PageHero
-          title="Бассейны Термбурга"
-          subtitle="Комплекс бассейнов для плавания, отдыха и всей семьи"
-          backgroundImage="/images/heroes/pools.webp"
-        />
-      {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
-        <Section>
-          <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        </Section>
-      </PageLayout>
-    );
-  }
+  const { data: zonesData } = useZonesData();
+  const zonesFromAcf = useMemo(() => mapZonesDataToCategories(zonesData.zones), [zonesData.zones]);
+  const poolZoneItems = findZoneCategory(zonesFromAcf, 'pools')?.items || [];
 
   return (
     <PageLayout
@@ -273,7 +145,7 @@ export default function PoolsPage() {
 
       {/* Pool Types */}
       <Section title="Наши бассейны" subtitle="Выберите бассейн по душе" warm>
-        <ZoneItemsGrid items={zoneCategories.find((c) => c.id === 'pools')?.items || []} columns={2} />
+        <ZoneItemsGrid items={poolZoneItems} columns={2} />
       </Section>
 
       {/* Features */}

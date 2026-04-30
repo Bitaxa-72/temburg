@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Thermometer, Droplets, Heart, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Thermometer, Droplets, Heart, CheckCircle2, AlertTriangle } from 'lucide-react';
 import PageLayout from '@/components/layout/PageLayout';
 import PageHero from '@/components/shared/PageHero';
 import Section from '@/components/ui/Section';
@@ -7,66 +7,11 @@ import Container from '@/components/ui/Container';
 import Card from '@/components/ui/Card';
 import TicketButton from '@/components/ui/TicketButton';
 import { useBooking } from '@/context/BookingContext';
-import { useZones } from '@/hooks/useWordPressData';
-import { zoneCategories } from '@/data/zoneCategories';
-import { toAbsolutePath } from '@/data/imagePaths';
+import { useZonesData } from '@/hooks/useWordPressData';
 import { ZoneItemsGrid } from '@/components/zones/ZoneCards';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
-
-// Парсит "до 80°C · влажн. 70%" → { temperature, humidity }
-function parseClimate(raw?: string): { temperature: string; humidity: string } {
-  if (!raw) return { temperature: '', humidity: '' };
-  const parts = raw.split('·').map(s => s.trim());
-  return { temperature: parts[0] || '', humidity: parts[1] || '' };
-}
-
-interface SteamRoomType {
-  id: string;
-  name: string;
-  description: string;
-  temperature: string;
-  humidity: string;
-  icon: string;
-  image?: string;
-  features: string[];
-}
-
-// Icon mapping by name keywords
-const iconMap: Record<string, string> = {
-  'русская': '🌿',
-  'хаммам': '🕌',
-  'турецк': '🕌',
-  'сауна': '🔥',
-  'трав': '🌺',
-  'соля': '💎',
-  'сибир': '🌲',
-  'алтай': '🏔️',
-};
-
-function getIconForRoom(name: string): string {
-  const lowName = name.toLowerCase();
-  for (const [key, icon] of Object.entries(iconMap)) {
-    if (lowName.includes(key)) return icon;
-  }
-  return '♨️';
-}
-
-// Источник истины — zoneCategories (как на главной странице).
-const fallbackSteamRooms: SteamRoomType[] =
-  (zoneCategories.find((c) => c.id === 'steam')?.items || []).map((item, idx) => {
-    const { temperature, humidity } = parseClimate(item.temp);
-    return {
-      id: `steam-${idx + 1}`,
-      name: item.name,
-      description: item.desc,
-      temperature,
-      humidity,
-      icon: getIconForRoom(item.name),
-      image: toAbsolutePath(item.image),
-      features: item.features || [],
-    };
-  });
+import { findZoneCategory, mapZonesDataToCategories } from '@/utils/zonesData';
 
 
 // Static benefits and recommendations (can be moved to WordPress later)
@@ -141,43 +86,9 @@ export default function SteamRoomsPage() {
   const { data: pageContent } = usePageContent('steam-rooms');
 
   const { openBooking } = useBooking();
-  const { data: wpZones, loading } = useZones();
-
-  // Convert WordPress zones to local format
-  const steamRooms = useMemo<SteamRoomType[]>(() => {
-    const steamCategory = wpZones?.steam;
-    if (steamCategory?.items?.length) {
-      return steamCategory.items.map((zone) => ({
-        id: String(zone.id),
-        name: zone.name,
-        description: zone.description,
-        temperature: zone.temperature,
-        humidity: zone.humidity,
-        icon: getIconForRoom(zone.name),
-        image: zone.image || undefined,
-        features: zone.features || [],
-      }));
-    }
-    return fallbackSteamRooms;
-  }, [wpZones]);
-
-  if (loading) {
-    return (
-      <PageLayout title="Парные Термбурга" description="Парные в Термбурге: русская баня, хаммам, травяная парная и соляная комната. Закаливание и релакс.">
-        <PageHero
-          title="Парные Термбурга"
-          subtitle="12 видов парных для здоровья, красоты и долголетия"
-          backgroundImage="/images/heroes/steam-rooms.webp"
-        />
-      {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
-        <Section>
-          <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        </Section>
-      </PageLayout>
-    );
-  }
+  const { data: zonesData } = useZonesData();
+  const zonesFromAcf = useMemo(() => mapZonesDataToCategories(zonesData.zones), [zonesData.zones]);
+  const steamZoneItems = findZoneCategory(zonesFromAcf, 'steam')?.items || [];
 
   return (
     <PageLayout
@@ -256,7 +167,7 @@ export default function SteamRoomsPage() {
 
       {/* Steam room types */}
       <Section warm title="Виды парных" subtitle="Выберите свой идеальный формат оздоровления">
-        <ZoneItemsGrid items={zoneCategories.find((c) => c.id === 'steam')?.items || []} />
+        <ZoneItemsGrid items={steamZoneItems} />
       </Section>
 
       {/* Benefits */}

@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useLocation, useMatch } from 'react-router-dom';
 import { Menu, X, ChevronDown, MapPin, UserCircle, Phone, Search } from 'lucide-react';
 import { useBooking } from '@/context/BookingContext';
-import { useSettings } from '@/hooks/useWordPressData';
+import { useHeader, useSettings } from '@/hooks/useWordPressData';
+import type { WPHeader } from '@/api/wordpress';
 
 interface NavItem {
   label: string;
@@ -11,74 +12,80 @@ interface NavItem {
   children?: { to: string; label: string; image?: string }[];
 }
 
-const navItems: NavItem[] = [
+function createNavItems(header: WPHeader): NavItem[] {
+  return [
   {
-    label: 'О комплексе',
+    label: header.nav.about,
     children: [
-      { to: '/about', label: 'О Термбурге', image: '/images/nav/about.png' },
-      { to: '/termliny', label: 'Термлины', image: '/images/nav/termliny.png' },
-      { to: '/steam-rooms', label: 'Парные', image: '/images/nav/steam-rooms.png' },
-      { to: '/pools', label: 'Бассейны', image: '/images/nav/pools.png' },
-      { to: '/jacuzzi', label: 'Джакузи', image: '/images/nav/jacuzzi.png' },
-      { to: '/faq', label: 'Частые вопросы', image: '/images/nav/faq.png' },
+      { to: '/about', label: header.nav.aboutPage, image: '/images/nav/about.png' },
+      { to: '/termliny', label: header.nav.termliny, image: '/images/nav/termliny.png' },
+      { to: '/steam-rooms', label: header.nav.steamRooms, image: '/images/nav/steam-rooms.png' },
+      { to: '/pools', label: header.nav.pools, image: '/images/nav/pools.png' },
+      { to: '/jacuzzi', label: header.nav.jacuzzi, image: '/images/nav/jacuzzi.png' },
+      { to: '/faq', label: header.nav.faq, image: '/images/nav/faq.png' },
     ],
   },
   {
-    label: 'Услуги',
+    label: header.nav.services,
     children: [
-      { to: '/pricing', label: 'Прайс-лист', image: '/images/nav/pricing.png' },
-      { to: '/services', label: 'Парения и SPA', image: '/images/nav/services.png' },
-      { to: '/swimming-school', label: 'Школа плавания', image: '/images/nav/swimming-school.png' },
-      { to: '/steam-school', label: 'Школа парения', image: '/images/nav/steam-school.png' },
-      { to: '/cafe', label: 'Кафетерий', image: '/images/nav/cafe.png' },
+      { to: '/pricing', label: header.nav.pricing, image: '/images/nav/pricing.png' },
+      { to: '/services', label: header.nav.servicesPage, image: '/images/nav/services.png' },
+      { to: '/swimming-school', label: header.nav.swimmingSchool, image: '/images/nav/swimming-school.png' },
+      { to: '/steam-school', label: header.nav.steamSchool, image: '/images/nav/steam-school.png' },
+      { to: '/cafe', label: header.nav.cafe, image: '/images/nav/cafe.png' },
     ],
   },
-  { label: 'Расписание', to: '/schedule', image: '/images/nav/schedule.png' },
-  { label: 'Акции', to: '/promotions', image: '/images/nav/promotions.png' },
-  { label: 'Новости', to: '/news', image: '/images/nav/news.png' },
-  { label: 'Контакты', to: '/contacts', image: '/images/nav/contacts.png' },
-];
+  { label: header.nav.schedule, to: '/schedule', image: '/images/nav/schedule.png' },
+  { label: header.nav.promotions, to: '/promotions', image: '/images/nav/promotions.png' },
+  { label: header.nav.news, to: '/news', image: '/images/nav/news.png' },
+  { label: header.nav.contacts, to: '/contacts', image: '/images/nav/contacts.png' },
+  ];
+}
 
 // Мобильное меню — группировка по разделам
-const mobileGroups = [
+function createMobileGroups(header: WPHeader) {
+  return [
   {
-    title: 'Основное',
+    title: header.mobileGroups.main,
     links: [
-      { to: '/', label: 'Главная' },
-      { to: '/about', label: 'О Термбурге' },
-      { to: '/termliny', label: 'Термлины' },
-      { to: '/steam-rooms', label: 'Парные' },
-      { to: '/pools', label: 'Бассейны' },
-      { to: '/jacuzzi', label: 'Джакузи' },
-      { to: '/faq', label: 'Частые вопросы' },
+      { to: '/', label: header.nav.home },
+      { to: '/about', label: header.nav.aboutPage },
+      { to: '/termliny', label: header.nav.termliny },
+      { to: '/steam-rooms', label: header.nav.steamRooms },
+      { to: '/pools', label: header.nav.pools },
+      { to: '/jacuzzi', label: header.nav.jacuzzi },
+      { to: '/faq', label: header.nav.faq },
     ],
   },
   {
-    title: 'Услуги и цены',
+    title: header.mobileGroups.services,
     links: [
-      { to: '/pricing', label: 'Прайс-лист' },
-      { to: '/services', label: 'Парения и SPA' },
-      { to: '/swimming-school', label: 'Школа плавания' },
-      { to: '/steam-school', label: 'Школа парения' },
-      { to: '/cafe', label: 'Кафетерий' },
-      { to: '/schedule', label: 'Расписание' },
+      { to: '/pricing', label: header.nav.pricing },
+      { to: '/services', label: header.nav.servicesPage },
+      { to: '/swimming-school', label: header.nav.swimmingSchool },
+      { to: '/steam-school', label: header.nav.steamSchool },
+      { to: '/cafe', label: header.nav.cafe },
+      { to: '/schedule', label: header.nav.schedule },
     ],
   },
   {
-    title: 'Ещё',
+    title: header.mobileGroups.more,
     links: [
-      { to: '/promotions', label: 'Акции' },
-      { to: '/news', label: 'Новости' },
-      { to: '/contacts', label: 'Контакты' },
-      { to: '/contacts#careers', label: 'Вакансии' },
+      { to: '/promotions', label: header.nav.promotions },
+      { to: '/news', label: header.nav.news },
+      { to: '/contacts', label: header.nav.contacts },
+      { to: '/contacts#careers', label: header.nav.careers },
     ],
   },
-];
+  ];
+}
 
-const cities = [
-  { name: 'Москва', active: true },
-  { name: 'Зеленогорск', active: false, soon: true },
-];
+function createCities(header: WPHeader) {
+  return [
+    { name: header.city.primary, active: true },
+    { name: header.city.secondary, active: false, soon: true },
+  ].filter((city) => city.name);
+}
 
 function DropdownMenu({ item }: { item: NavItem }) {
   const [open, setOpen] = useState(false);
@@ -135,9 +142,10 @@ function DropdownMenu({ item }: { item: NavItem }) {
   );
 }
 
-function CitySelector() {
+function CitySelector({ header }: { header: WPHeader }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const cities = createCities(header);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -155,7 +163,7 @@ function CitySelector() {
         className="inline-flex items-center gap-1.5 text-sm text-white/60 hover:text-white/80 transition-colors"
       >
         <MapPin className="w-3.5 h-3.5 text-primary" />
-        <span>Москва</span>
+        <span>{header.city.primary}</span>
         <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
@@ -174,7 +182,7 @@ function CitySelector() {
               {city.name}
               {!city.active && (
                 <span className="text-[10px] bg-white/10 text-white/40 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                  Скоро
+                  {header.city.secondaryBadge}
                 </span>
               )}
             </button>
@@ -187,9 +195,14 @@ function CitySelector() {
 
 export default function Header() {
   const { openBooking, openSearch } = useBooking();
+  const { data: header } = useHeader();
   const { data: settings } = useSettings();
-  const phone = settings?.phone || '+7 (909) 167-47-46';
+  const phone = header?.phone || settings?.phone || '+7 (909) 167-47-46';
   const phoneHref = `tel:${phone.replace(/[\s()-]/g, '')}`;
+  const navItems = createNavItems(header);
+  const mobileGroups = createMobileGroups(header);
+  const cities = createCities(header);
+  const logoUrl = header.logoUrl || '/favicon.ico';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mobileCityOpen, setMobileCityOpen] = useState(false);
@@ -225,13 +238,13 @@ export default function Header() {
           {/* Logo + City */}
           <div className="flex items-center gap-4">
             <Link to="/" className="flex-shrink-0 flex items-center gap-2.5" onClick={closeMobileMenu}>
-              <img src="/favicon.ico" alt="" className="h-7 w-7 md:h-8 md:w-8" />
+              <img src={logoUrl} alt="" className="h-7 w-7 md:h-8 md:w-8" />
               <span className="font-heading text-xl font-bold tracking-[0.2em] text-primary md:text-2xl">
-                ТЕРМБУРГ
+                {header.brandText}
               </span>
             </Link>
             <div className="hidden lg:block">
-              <CitySelector />
+              <CitySelector header={header} />
             </div>
           </div>
 
@@ -263,7 +276,7 @@ export default function Header() {
               type="button"
               onClick={openSearch}
               className="inline-flex items-center justify-center rounded-md p-1.5 text-white/60 hover:text-primary transition-colors duration-200"
-              aria-label="Поиск"
+              aria-label={header.actions.searchAria}
             >
               <Search className="h-5 w-5" />
             </button>
@@ -271,7 +284,7 @@ export default function Header() {
             {/* Social links */}
             <div className="flex items-center gap-1">
               <a
-                href="https://max.ru/termburg"
+                href={header.links.max}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-7 h-7 rounded-md bg-white/5 flex items-center justify-center text-white/60 hover:text-primary hover:bg-white/10 transition-colors"
@@ -282,7 +295,7 @@ export default function Header() {
                 </svg>
               </a>
               <a
-                href="https://vk.com/termburg"
+                href={header.links.vk}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-7 h-7 rounded-md bg-white/5 flex items-center justify-center text-white/60 hover:text-primary hover:bg-white/10 transition-colors"
@@ -297,7 +310,7 @@ export default function Header() {
             <Link
               to="/account"
               className="inline-flex items-center justify-center rounded-md p-1.5 text-white/60 hover:text-primary transition-colors duration-200"
-              aria-label="Личный кабинет"
+              aria-label={header.actions.accountLabel}
             >
               <UserCircle className="h-5 w-5" />
             </Link>
@@ -307,7 +320,7 @@ export default function Header() {
               onClick={openBooking}
               className="inline-flex items-center whitespace-nowrap rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-primary-light"
             >
-              Купить
+              {header.actions.buyLabel}
             </button>
 
             <a
@@ -324,7 +337,7 @@ export default function Header() {
             type="button"
             className="inline-flex items-center justify-center rounded-md p-2 text-white/80 transition-colors hover:text-white lg:hidden"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label={mobileMenuOpen ? 'Закрыть меню' : 'Открыть меню'}
+            aria-label={mobileMenuOpen ? header.actions.closeMenuAria : header.actions.openMenuAria}
           >
             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -354,10 +367,10 @@ export default function Header() {
           >
             <div className="flex items-center gap-2 text-white/80">
               <MapPin className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium">Москва</span>
+              <span className="text-sm font-medium">{header.city.primary}</span>
               <ChevronDown className={`ml-auto w-3.5 h-3.5 text-white/40 transition-transform ${mobileCityOpen ? 'rotate-180' : ''}`} />
             </div>
-            <p className="mt-1 text-xs text-white/40">ул. Гурьянова, д. 30</p>
+            <p className="mt-1 text-xs text-white/40">{header.city.address}</p>
           </button>
 
           {mobileCityOpen && (
@@ -372,7 +385,7 @@ export default function Header() {
                   {city.name}
                   {!city.active && (
                     <span className="text-[10px] bg-white/10 text-white/40 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                      Скоро
+                      {header.city.secondaryBadge}
                     </span>
                   )}
                 </div>
@@ -418,7 +431,7 @@ export default function Header() {
               className="flex w-full items-center gap-2.5 rounded-lg px-4 py-3 text-sm font-medium text-white/70 hover:text-white hover:bg-white/5 transition-colors duration-200"
             >
               <Search className="h-4.5 w-4.5" />
-              Поиск по сайту
+              {header.actions.searchLabel}
             </button>
             <NavLink
               to="/account"
@@ -432,14 +445,14 @@ export default function Header() {
               }
             >
               <UserCircle className="h-4.5 w-4.5" />
-              Личный кабинет
+              {header.actions.accountLabel}
             </NavLink>
             <button
               type="button"
               onClick={() => { closeMobileMenu(); openBooking(); }}
               className="block w-full rounded-lg bg-primary px-4 py-3 text-center text-sm font-semibold text-white transition-colors duration-200 hover:bg-primary-light"
             >
-              Купить
+              {header.actions.buyLabel}
             </button>
           </div>
         </div>

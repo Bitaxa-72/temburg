@@ -8,20 +8,24 @@ export default function OfferPage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «offer» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('offer');
+  const hasPageBlocks = (pageContent?.blocks?.length || 0) > 0;
+  const pageTitle = pageContent?.title || 'Публичная оферта';
+  const pageDescription = pageContent?.metaDescription || 'Публичная оферта на оказание услуг термального комплекса Термбург. Условия посещения, порядок оплаты, права и обязанности сторон.';
 
   return (
     <PageLayout
-      title="Публичная оферта"
-      description="Публичная оферта на оказание услуг термального комплекса Термбург. Условия посещения, порядок оплаты, права и обязанности сторон."
+      title={pageTitle}
+      description={pageDescription}
     >
       <PageHero
-        title="Публичная оферта"
+        title={pageTitle}
         subtitle="Договор на оказание услуг термального комплекса"
         backgroundImage="/images/heroes/offer.webp"
       />
-      {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
-
-      <Section>
+      {hasPageBlocks ? (
+        <WPContentBlocks blocks={pageContent.blocks} />
+      ) : (
+        <Section>
         <div className="max-w-4xl mx-auto">
           <p className="text-text-secondary leading-relaxed mb-6 text-center italic">
             Редакция от 01.01.2024 г.
@@ -463,7 +467,8 @@ export default function OfferPage() {
             </div>
           </div>
         </div>
-      </Section>
+        </Section>
+      )}
     </PageLayout>
   );
 }

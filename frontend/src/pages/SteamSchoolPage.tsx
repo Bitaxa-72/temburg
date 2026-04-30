@@ -8,7 +8,7 @@ import Container from '@/components/ui/Container';
 import TicketButton from '@/components/ui/TicketButton';
 import { useBooking } from '@/context/BookingContext';
 import { steamSchool, type SchoolProgram } from '@/data/services';
-import { usePageContent } from '@/hooks/useWordPressData';
+import { usePageContent, useSchoolsContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
 
 const SITE_URL = 'https://termburg.ceosivaev.ru';
@@ -99,12 +99,32 @@ export default function SteamSchoolPage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «steam-school» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('steam-school');
+  const { data: schoolsContent } = useSchoolsContent();
+  const schoolContent = schoolsContent.steam;
+  const programs = useMemo<SchoolProgram[]>(() => {
+    if (!schoolContent.programs?.length) return steamSchool;
+
+    return schoolContent.programs.map((program, index) => {
+      const fallback = steamSchool[index];
+
+      return {
+        ...program,
+        image: program.image || fallback?.image || '/images/services/steam-author-new.webp',
+        fullDescription: program.fullDescription || program.description || fallback?.fullDescription || '',
+        includes: program.includes?.length ? program.includes : fallback?.includes || [],
+      };
+    });
+  }, [schoolContent.programs]);
+  const schoolAdvantages = schoolContent.advantages?.length ? schoolContent.advantages : advantages;
+  const introParagraphs = schoolContent.introText
+    ? schoolContent.introText.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+    : null;
 
   const { openBooking } = useBooking();
   const [selected, setSelected] = useState<SchoolProgram | null>(null);
 
   // Course schema for SEO
-  const courseSchema = useMemo(() => steamSchool.map((program) => ({
+  const courseSchema = useMemo(() => programs.map((program) => ({
     '@context': 'https://schema.org',
     '@type': 'Course',
     name: program.name,
@@ -134,7 +154,7 @@ export default function SteamSchoolPage() {
         },
       },
     },
-  })), []);
+  })), [programs]);
 
   return (
     <PageLayout
@@ -143,8 +163,8 @@ export default function SteamSchoolPage() {
       schema={courseSchema}
     >
       <PageHero
-        title="Школа парения"
-        subtitle="Научитесь искусству парения у профессиональных банщиков"
+        title={schoolContent.heroTitle || 'Школа парения'}
+        subtitle={schoolContent.heroSubtitle || 'Научитесь искусству парения у профессиональных банщиков'}
         backgroundImage="/images/heroes/steam-school.webp"
       />
       {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
@@ -155,25 +175,31 @@ export default function SteamSchoolPage() {
           <div className="flex-1 space-y-4">
             <div className="flex items-center gap-2">
               <Flame className="h-6 w-6 text-primary" />
-              <h2 className="text-2xl font-bold text-text-primary">Искусство парения</h2>
+              <h2 className="text-2xl font-bold text-text-primary">{schoolContent.introTitle || 'Искусство парения'}</h2>
             </div>
-            <p className="text-lg leading-relaxed text-text-secondary">
-              Вы обожаете баню и мечтаете освоить искусство парения? Хотите стать настоящим мастером банного дела
-              или просто улучшить свои навыки для личного удовольствия? Тогда школа домашнего банщика в Термбург для вас!
-            </p>
-            <p className="text-lg leading-relaxed text-text-secondary">
-              Учитесь у лучших специалистов и получите ценные знания и навыки, которые сможете применять в кругу друзей и близких!
-              Подарок для лучших выпускников: по завершении курса — практика в нашем комплексе!
-            </p>
+            {introParagraphs ? introParagraphs.map((text) => (
+              <p key={text} className="text-lg leading-relaxed text-text-secondary">{text}</p>
+            )) : (
+              <>
+                <p className="text-lg leading-relaxed text-text-secondary">
+                  Вы обожаете баню и мечтаете освоить искусство парения? Хотите стать настоящим мастером банного дела
+                  или просто улучшить свои навыки для личного удовольствия? Тогда школа домашнего банщика в Термбург для вас!
+                </p>
+                <p className="text-lg leading-relaxed text-text-secondary">
+                  Учитесь у лучших специалистов и получите ценные знания и навыки, которые сможете применять в кругу друзей и близких!
+                  Подарок для лучших выпускников: по завершении курса — практика в нашем комплексе!
+                </p>
+              </>
+            )}
           </div>
-          <img src="/images/services/steam-author-new.webp" alt="Мастер парения" className="w-full md:w-72 h-48 md:h-56 rounded-2xl object-cover flex-shrink-0" />
+          <img src={schoolContent.introImage || '/images/services/steam-author-new.webp'} alt="Мастер парения" className="w-full md:w-72 h-48 md:h-56 rounded-2xl object-cover flex-shrink-0" />
         </div>
       </Section>
 
       {/* Advantages */}
       <Section title="Чему вы научитесь" warm>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {advantages.map((text) => (
+          {schoolAdvantages.map((text) => (
             <div key={text} className="flex items-center gap-3 rounded-xl bg-surface p-4 border border-border/50">
               <CheckCircle className="h-5 w-5 flex-shrink-0 text-success" />
               <span className="text-text-primary font-medium text-sm">{text}</span>
@@ -185,7 +211,7 @@ export default function SteamSchoolPage() {
       {/* Programs */}
       <Section title="Программы" subtitle="Нажмите на карточку, чтобы узнать подробности">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {steamSchool.map((program) => (
+          {programs.map((program) => (
             <ProgramCard key={program.id} program={program} onSelect={() => setSelected(program)} />
           ))}
         </div>
@@ -196,9 +222,9 @@ export default function SteamSchoolPage() {
         <div className="gold-separator absolute top-0 left-0 right-0" />
         <Container>
           <GraduationCap className="mx-auto mb-4 h-8 w-8 text-primary" />
-          <h2 className="mb-4 font-heading text-2xl font-bold text-white md:text-3xl">Запишитесь на курс</h2>
-          <p className="mx-auto mb-8 max-w-xl text-white/70">Откройте для себя настоящее искусство парения вместе с мастерами Термбурга.</p>
-          <TicketButton onClick={openBooking}>Записаться</TicketButton>
+          <h2 className="mb-4 font-heading text-2xl font-bold text-white md:text-3xl">{schoolContent.ctaTitle || 'Запишитесь на курс'}</h2>
+          <p className="mx-auto mb-8 max-w-xl text-white/70">{schoolContent.ctaText || 'Откройте для себя настоящее искусство парения вместе с мастерами Термбурга.'}</p>
+          <TicketButton onClick={openBooking}>{schoolContent.ctaButton || 'Записаться'}</TicketButton>
           <p className="mt-4 text-sm text-white/50">
             Или позвоните: <a href="tel:+79091674746" className="text-primary hover:underline">+7 (909) 167-47-46</a>
           </p>

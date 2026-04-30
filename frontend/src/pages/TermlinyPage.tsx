@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Flame, Droplets, Wind, Home, BookOpen, Heart, Sparkles, ChevronDown } from 'lucide-react';
 import { type ReactNode } from 'react';
 import PageLayout from '@/components/layout/PageLayout';
 import Section from '@/components/ui/Section';
 import Card from '@/components/ui/Card';
 import Container from '@/components/ui/Container';
-import { termliny as localTermliny, type Termlin } from '@/data/termliny';
-import { usePageContent } from '@/hooks/useWordPressData';
+import { type Termlin } from '@/data/termliny';
+import { usePageContent, useTermliny } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
 
 const elementIcons: Record<string, ReactNode> = {
@@ -159,16 +159,7 @@ export default function TermlinyPage() {
   // Если в админке для slug «termliny» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('termliny');
 
-  const [wpTermliny, setWpTermliny] = useState<Termlin[] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/wp-json/termburg/v1/termliny')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (!cancelled && data) setWpTermliny(data); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-  const termliny = wpTermliny || localTermliny;
+  const { data: termliny } = useTermliny();
 
   return (
     <PageLayout

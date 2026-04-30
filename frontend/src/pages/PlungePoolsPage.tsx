@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Snowflake, Waves, Droplets, Leaf, Heart, ShieldCheck, TrendingUp, BookOpen, type LucideIcon } from 'lucide-react';
 import PageLayout from '@/components/layout/PageLayout';
 import PageHero from '@/components/shared/PageHero';
@@ -6,9 +7,9 @@ import Container from '@/components/ui/Container';
 import Card from '@/components/ui/Card';
 import TicketButton from '@/components/ui/TicketButton';
 import { useBooking } from '@/context/BookingContext';
-import { zoneCategories } from '@/data/zoneCategories';
-import { usePageContent } from '@/hooks/useWordPressData';
+import { usePageContent, useZonesData } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
+import { findZoneCategory, mapZonesDataToCategories } from '@/utils/zonesData';
 
 interface PlungePoolType {
   id: string;
@@ -20,20 +21,8 @@ interface PlungePoolType {
   color: string;
 }
 
-// Источник истины — zoneCategories (купели из главной страницы)
+// Icons are decorative; card content comes from /zones-data.
 const ICONS_BY_INDEX = [Snowflake, Droplets, Waves, Leaf];
-const plungePoolTypes: PlungePoolType[] = (zoneCategories.find(c => c.id === 'pools-cold')?.items || [])
-  .filter(item => /купел/i.test(item.name))
-  .map((item, idx) => ({
-    id: 'cold-' + (idx + 1),
-    name: item.name,
-    icon: ICONS_BY_INDEX[idx] || Snowflake,
-    temperature: (item.temp || '').split('·')[0].trim(),
-    description: item.desc,
-    benefits: item.features || [],
-    color: idx === 0 ? 'text-cyan-400' : 'text-blue-400',
-  }));
-
 
 const benefits = [
   {
@@ -87,6 +76,23 @@ export default function PlungePoolsPage() {
   const { data: pageContent } = usePageContent('plunge-pools');
 
   const { openBooking } = useBooking();
+  const { data: zonesData } = useZonesData();
+  const zonesFromAcf = useMemo(() => mapZonesDataToCategories(zonesData.zones), [zonesData.zones]);
+  const plungePoolTypesFromAcf = useMemo<PlungePoolType[]>(
+    () =>
+      (findZoneCategory(zonesFromAcf, 'pools-cold')?.items || [])
+        .filter((item) => /купел/i.test(item.name))
+        .map((item, idx) => ({
+          id: 'cold-' + (idx + 1),
+          name: item.name,
+          icon: ICONS_BY_INDEX[idx] || Snowflake,
+          temperature: (item.temp || '').split('·')[0].trim(),
+          description: item.desc,
+          benefits: item.features || [],
+          color: idx === 0 ? 'text-cyan-400' : 'text-blue-400',
+        })),
+    [zonesFromAcf],
+  );
 
   return (
     <PageLayout
@@ -119,7 +125,7 @@ export default function PlungePoolsPage() {
       {/* Plunge Pool Types */}
       <Section warm title="Виды купелей" subtitle="Выберите свой уровень контраста">
         <div className="grid gap-6 md:grid-cols-2">
-          {plungePoolTypes.map((pool) => {
+          {plungePoolTypesFromAcf.map((pool) => {
             const Icon = pool.icon;
             return (
               <Card key={pool.id} className="flex flex-col h-full">

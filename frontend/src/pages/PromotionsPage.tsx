@@ -8,7 +8,7 @@ import TicketButton from '@/components/ui/TicketButton';
 import Container from '@/components/ui/Container';
 import { useBooking } from '@/context/BookingContext';
 import { usePromotions } from '@/hooks/useWordPressData';
-import { promotions as fallbackPromotions } from '@/data/promotions';
+import { promotions as fallbackPromotions, type Promotion } from '@/data/promotions';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
 
@@ -21,7 +21,19 @@ export default function PromotionsPage() {
   const { data: wpPromotions, loading } = usePromotions();
 
   // Use WordPress data or fallback to static
-  const promotions = wpPromotions.length > 0 ? wpPromotions : fallbackPromotions;
+  const promotions: Promotion[] = wpPromotions.length > 0
+    ? wpPromotions.map((promo, index) => {
+        const fallback = fallbackPromotions[index % fallbackPromotions.length];
+
+        return {
+          ...promo,
+          discount: promo.discount ?? undefined,
+          validUntil: promo.validUntil ?? undefined,
+          badge: promo.badge || fallback.badge,
+          banner: promo.banner || fallback.banner,
+        };
+      })
+    : fallbackPromotions;
 
   return (
     <PageLayout title="Акции" description="Актуальные акции и специальные предложения Термбурга.">

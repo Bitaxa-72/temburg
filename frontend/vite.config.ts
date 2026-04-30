@@ -45,8 +45,19 @@ export default defineConfig({
   build: {
     outDir: 'build',
     sourcemap: false,
+    modulePreload: false,
+    cssCodeSplit: false,
     rollupOptions: {
       output: {
+        entryFileNames: 'assets/app.js',
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name?.endsWith('.css')) {
+            return 'assets/app.css';
+          }
+
+          return 'assets/[name]-[hash][extname]';
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
             if (id.includes('react-router')) return 'vendor-router';

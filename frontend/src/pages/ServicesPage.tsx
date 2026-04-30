@@ -350,7 +350,7 @@ export default function ServicesPage() {
             <ServiceCard
               key={service.id}
               service={service}
-              image={steamImages[service.id]}
+              image={allImages[service.id]}
               onClick={() => openModal(service)}
             />
           ))}
@@ -371,7 +371,7 @@ export default function ServicesPage() {
             <ServiceCard
               key={service.id}
               service={service}
-              image={spaImages[service.id]}
+              image={allImages[service.id]}
               onClick={() => openModal(service)}
             />
           ))}

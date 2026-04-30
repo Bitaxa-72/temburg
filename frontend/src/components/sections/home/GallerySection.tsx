@@ -4,40 +4,57 @@ import { ArrowRight, Play } from 'lucide-react';
 import Section from '@/components/ui/Section';
 import ImageLightbox from '@/components/shared/ImageLightbox';
 import { useImages } from '@/hooks/useImage';
+import { useGallery } from '@/hooks/useWordPressData';
 import { COMPLEX_IMAGES } from '@/data/imagePaths';
+import { mapGalleryData, type GalleryDisplayItem } from '@/utils/galleryData';
 
-interface GalleryItem {
-  id: number;
-  src: string;
-  alt: string;
+interface GalleryItem extends GalleryDisplayItem {
   type: 'photo' | 'video';
   videoUrl?: string;
 }
 
 const galleryItemsData: GalleryItem[] = [
-  { id: 1, src: COMPLEX_IMAGES.gallery1, alt: 'Термальный бассейн', type: 'photo' },
-  { id: 2, src: COMPLEX_IMAGES.gallery2, alt: 'Зона отдыха', type: 'photo' },
-  { id: 3, src: COMPLEX_IMAGES.pool, alt: 'Бассейн', type: 'photo' },
-  { id: 4, src: COMPLEX_IMAGES.gallery4, alt: 'Парная', type: 'photo' },
-  { id: 5, src: COMPLEX_IMAGES.sauna, alt: 'Сауна', type: 'photo' },
-  { id: 6, src: COMPLEX_IMAGES.gallery6, alt: 'Интерьер', type: 'photo' },
-  { id: 7, src: COMPLEX_IMAGES.herbal, alt: 'Травяная парная', type: 'photo' },
-  { id: 8, src: COMPLEX_IMAGES.gallery8, alt: 'Атмосфера', type: 'photo' },
+  { id: 1, src: COMPLEX_IMAGES.gallery1, alt: 'Термальный бассейн', category: 'pool', type: 'photo' },
+  { id: 2, src: COMPLEX_IMAGES.gallery2, alt: 'Зона отдыха', category: 'interior', type: 'photo' },
+  { id: 3, src: COMPLEX_IMAGES.pool, alt: 'Бассейн', category: 'pool', type: 'photo' },
+  { id: 4, src: COMPLEX_IMAGES.gallery4, alt: 'Парная', category: 'sauna', type: 'photo' },
+  { id: 5, src: COMPLEX_IMAGES.sauna, alt: 'Сауна', category: 'sauna', type: 'photo' },
+  { id: 6, src: COMPLEX_IMAGES.gallery6, alt: 'Интерьер', category: 'interior', type: 'photo' },
+  { id: 7, src: COMPLEX_IMAGES.herbal, alt: 'Травяная парная', category: 'sauna', type: 'photo' },
+  { id: 8, src: COMPLEX_IMAGES.gallery8, alt: 'Атмосфера', category: 'interior', type: 'photo' },
 ];
+
+function isResolvedImageUrl(src: string): boolean {
+  return /^(https?:)?\/\//.test(src) || src.startsWith('/');
+}
 
 export default function GallerySection() {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const { data: wpGallery } = useGallery();
+
+  const sourceItems = useMemo(
+    () => mapGalleryData(wpGallery, galleryItemsData).slice(0, 8),
+    [wpGallery],
+  );
 
   // Get all image paths for useImages hook
-  const imagePaths = useMemo(() => galleryItemsData.map((item) => item.src), []);
+  const imagePaths = useMemo(
+    () => sourceItems.map((item) => item.src).filter((src) => !isResolvedImageUrl(src)),
+    [sourceItems],
+  );
   const imageUrls = useImages(imagePaths);
 
   // Map gallery items with resolved URLs
-  const galleryItems = useMemo(() => galleryItemsData.map((item) => ({
-    ...item,
-    resolvedSrc: imageUrls[item.src] || `/images/${item.src}`,
-  })), [imageUrls]);
+  const galleryItems = useMemo(() => sourceItems.map((item) => {
+    const itemType = (item as Partial<GalleryItem>).type || 'photo';
+
+    return {
+      ...item,
+      type: itemType,
+      resolvedSrc: isResolvedImageUrl(item.src) ? item.src : imageUrls[item.src] || `/images/${item.src}`,
+    };
+  }), [imageUrls, sourceItems]);
 
   const openLightbox = (index: number) => {
     setCurrentIndex(index);

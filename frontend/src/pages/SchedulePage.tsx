@@ -7,34 +7,9 @@ import Container from '@/components/ui/Container';
 import { useBooking } from '@/context/BookingContext';
 import { useSchedule } from '@/hooks/useWordPressData';
 import { scheduleEvents as fallbackEvents, daysOfWeek, type ScheduleEvent } from '@/data/schedule';
-import type { WPScheduleEvent } from '@/api/wordpress';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
-
-// Convert WordPress event to local format
-function wpToScheduleEvent(wp: any): ScheduleEvent {
-  // WP-эндпоинт уже возвращает поля в нужном формате (day/name/type),
-  // но на всякий случай поддержим оба варианта именования.
-  const day = Array.isArray(wp.day)
-    ? wp.day
-    : Array.isArray(wp.weekdays)
-      ? wp.weekdays
-      : [];
-  const type: ScheduleEvent['type'] =
-    wp.type || (wp.highlight ? 'special' : wp.isFree ? 'free' : 'paid');
-  return {
-    id: wp.id,
-    name: wp.name || wp.title,
-    time: wp.time,
-    duration: wp.duration,
-    day,
-    type,
-    description: wp.description,
-    instructor: wp.instructor || undefined,
-    price: wp.price || undefined,
-    highlight: wp.highlight,
-  };
-}
+import { mapScheduleData } from '@/utils/scheduleData';
 
 // Russian holidays 2024-2026
 const holidays: Record<string, string> = {
@@ -163,12 +138,13 @@ function EventRow({ event, showDays }: { event: ScheduleEvent; showDays?: boolea
           {isSpecial && <span className="mr-1">🌲</span>}
           {event.name}
         </h3>
-        <div className="flex items-center gap-2 mt-0.5 text-xs text-text-secondary">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 text-xs text-text-secondary">
           <span className="flex items-center gap-1">
             <Timer className="w-3 h-3" />
             {event.duration}
           </span>
           {event.instructor && <span>{event.instructor}</span>}
+          {event.location && <span>{event.location}</span>}
           {showDays && (
             <span className="text-text-secondary/60">
               {event.day.length === 7
@@ -177,6 +153,11 @@ function EventRow({ event, showDays }: { event: ScheduleEvent; showDays?: boolea
             </span>
           )}
         </div>
+        {event.description && (
+          <p className="mt-2 text-xs leading-relaxed text-text-secondary line-clamp-2">
+            {event.description}
+          </p>
+        )}
       </div>
       <div className="flex-shrink-0">
         {isPaid && event.price ? (
@@ -646,11 +627,7 @@ export default function SchedulePage() {
 
   // Update global scheduleEvents when data is loaded
   useMemo(() => {
-    if (wpSchedule.length > 0) {
-      scheduleEvents = wpSchedule.map(wpToScheduleEvent);
-    } else {
-      scheduleEvents = fallbackEvents;
-    }
+    scheduleEvents = mapScheduleData(wpSchedule);
   }, [wpSchedule]);
 
   const displayDayName = getDayNameByDate(selectedDate);

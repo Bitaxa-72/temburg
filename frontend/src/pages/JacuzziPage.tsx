@@ -1,41 +1,15 @@
+import { useMemo } from 'react';
 import PageLayout from '@/components/layout/PageLayout';
 import PageHero from '@/components/shared/PageHero';
 import Section from '@/components/ui/Section';
 import Container from '@/components/ui/Container';
-import Card from '@/components/ui/Card';
 import TicketButton from '@/components/ui/TicketButton';
 import { useBooking } from '@/context/BookingContext';
-import { Waves, Droplets, Sparkles, Heart, Wind, Thermometer, CheckCircle2 } from 'lucide-react';
-import { zoneCategories } from '@/data/zoneCategories';
-import { toAbsolutePath } from '@/data/imagePaths';
+import { Waves, Droplets, Sparkles, Heart, Wind, Thermometer } from 'lucide-react';
 import { ZoneItemsGrid } from '@/components/zones/ZoneCards';
-import { usePageContent } from '@/hooks/useWordPressData';
+import { usePageContent, useZonesData } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
-
-interface JacuzziOption {
-  id: string;
-  name: string;
-  description: string;
-  capacity: string;
-  price: string;
-  features: string[];
-  image: string;
-  badge?: string;
-}
-
-// Источник истины — zoneCategories (джакузи из главной)
-const jacuzziOptions: JacuzziOption[] = (zoneCategories.find(c => c.id === 'pools-cold')?.items || [])
-  .filter(item => /джакузи/i.test(item.name))
-  .map((item, idx) => ({
-    id: 'jacuzzi-' + (idx + 1),
-    name: item.name,
-    description: item.desc,
-    capacity: '',
-    price: 'Включено в билет',
-    features: item.features || [],
-    image: toAbsolutePath(item.image),
-    badge: idx === 0 ? 'Популярное' : undefined,
-  }));
+import { findZoneCategory, mapZonesDataToCategories } from '@/utils/zonesData';
 
 const features = [
   {
@@ -84,6 +58,9 @@ export default function JacuzziPage() {
   const { data: pageContent } = usePageContent('jacuzzi');
 
   const { openBooking } = useBooking();
+  const { data: zonesData } = useZonesData();
+  const zonesFromAcf = useMemo(() => mapZonesDataToCategories(zonesData.zones), [zonesData.zones]);
+  const jacuzziZoneItems = findZoneCategory(zonesFromAcf, 'pools-cold')?.items || [];
 
   return (
     <PageLayout
@@ -165,7 +142,7 @@ export default function JacuzziPage() {
         title="Наши купели и джакузи"
         subtitle="Выберите подходящий формат — расслабление, контраст или и то, и другое"
       >
-        <ZoneItemsGrid items={zoneCategories.find((c) => c.id === 'pools-cold')?.items || []} columns={2} />
+        <ZoneItemsGrid items={jacuzziZoneItems} columns={2} />
       </Section>
 
       {/* Features */}

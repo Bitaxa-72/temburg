@@ -1,18 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Filter } from 'lucide-react';
 import PageLayout from '@/components/layout/PageLayout';
 import PageHero from '@/components/shared/PageHero';
 import Section from '@/components/ui/Section';
 import ImageLightbox from '@/components/shared/ImageLightbox';
-import { usePageContent } from '@/hooks/useWordPressData';
+import { useGallery, usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
-
-interface GalleryItem {
-  id: number;
-  src: string;
-  alt: string;
-  category: string;
-}
+import { mapGalleryData, type GalleryDisplayItem } from '@/utils/galleryData';
 
 const categories = [
   { id: 'all', name: 'Все' },
@@ -23,7 +17,7 @@ const categories = [
   { id: 'events', name: 'Мероприятия' },
 ];
 
-const galleryItems: GalleryItem[] = [
+const galleryItems: GalleryDisplayItem[] = [
   // Бассейн
   { id: 1, src: '/images/complex/pool.webp', alt: 'Термальный бассейн', category: 'pool' },
   { id: 2, src: '/images/complex/gallery1.webp', alt: 'Бассейн с подсветкой', category: 'pool' },
@@ -71,32 +65,18 @@ export default function GalleryPage() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [wpGallery, setWpGallery] = useState<GalleryItem[] | null>(null);
+  const { data: wpGallery } = useGallery();
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/wp-json/termburg/v1/gallery')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!cancelled && Array.isArray(data) && data.length > 0) {
-          setWpGallery(data.map((item: any, i: number) => ({
-            id: item.id || i + 1,
-            src: item.src || item.image || item.url || '',
-            alt: item.alt || item.caption || item.title || '',
-            category: item.category || 'interior',
-          })));
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
-  const actualGallery = wpGallery || galleryItems;
+  const actualGallery = useMemo(() => mapGalleryData(wpGallery, galleryItems), [wpGallery]);
 
   const filteredItems = useMemo(() => {
     if (activeCategory === 'all') return actualGallery;
     return actualGallery.filter((item) => item.category === activeCategory);
   }, [activeCategory, actualGallery]);
+
+  const visibleCategories = useMemo(() => (
+    categories.filter((cat) => cat.id === 'all' || actualGallery.some((item) => item.category === cat.id))
+  ), [actualGallery]);
 
   const openLightbox = (index: number) => {
     setCurrentIndex(index);
@@ -124,7 +104,7 @@ export default function GalleryPage() {
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2 mb-8">
           <Filter className="h-4 w-4 text-text-secondary" />
-          {categories.map((cat) => (
+          {visibleCategories.map((cat) => (
             <button
               key={cat.id}
               type="button"

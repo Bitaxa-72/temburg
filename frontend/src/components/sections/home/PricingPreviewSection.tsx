@@ -20,6 +20,7 @@ function getLocalDateString() {
 const PricingPreviewSection = memo(function PricingPreviewSection() {
   const { openBooking, openPurchase, openWhatToBring } = useBooking();
   const { data: wpPricing } = usePricing();
+  const content = wpPricing.pricingContent;
   const weekdaySlots = wpPricing.weekday.length > 0
     ? wpPricing.weekday.map((slot) => ({ ...slot, id: String(slot.id) }))
     : weekdayPricing;
@@ -33,28 +34,31 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
     ? wpPricing.subscriptions.slice(0, 4).map((slot) => ({
         id: String(slot.id),
         name: slot.name,
+        period: slot.period || slot.duration,
         adultPrice: slot.adultPrice,
         discount: slot.discount ?? 0,
         description: slot.description ?? '',
       }))
-    : subscriptions.slice(0, 4);
+    : subscriptions.slice(0, 4).map((slot) => ({ ...slot, period: slot.period }));
   const childUnder6Price = wpPricing.childUnder6 ?? fallbackChildUnder6;
   const today = getLocalDateString();
   const specialWeekendDates = Array.isArray(wpPricing.specialWeekendDates) ? wpPricing.specialWeekendDates : [];
   const isSpecialWeekendToday = specialWeekendDates.includes(today);
   const displayWeekdaySlots = isSpecialWeekendToday ? weekendSlots : weekdaySlots;
-  const weekdayColumnTitle = isSpecialWeekendToday ? 'Сегодня действует тариф выходного дня' : 'Будни';
-  const weekdayPurchasePrefix = isSpecialWeekendToday ? 'Праздники' : 'Будни';
+  const weekdayColumnTitle = isSpecialWeekendToday ? (content?.specialWeekendTodayLabel || 'Сегодня действует тариф выходного дня') : (content?.weekdayLabel || 'Будни');
+  const weekdayPurchasePrefix = isSpecialWeekendToday ? 'Праздники' : (content?.weekdayLabel || 'Будни');
   const pricingHint = isSpecialWeekendToday
-    ? 'Сегодня для дневных тарифов действует цена выходного или праздничного дня.'
-    : 'Пятница: до 16:00 — тариф будней, после 16:00 — тариф выходных';
+    ? (content?.specialWeekendTodayNote || 'Сегодня для дневных тарифов действует цена выходного или праздничного дня.')
+    : (content?.fridayNote || 'Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных');
+  const childNote = (content?.childNote || 'Дети до 6 лет включительно — {price} ₽ безлимит')
+    .replace('{price}', childUnder6Price.toLocaleString('ru-RU'));
 
   return (
     <Section
       warm
       separator
-      title="Стоимость и абонементы"
-      subtitle="Гибкая система тарифов — от 1 часа до безлимита на день"
+      title={content?.sectionTitle || 'Стоимость и абонементы'}
+      subtitle={content?.sectionSubtitle || 'Гибкая система тарифов — от 1 часа до безлимита на день'}
     >
       <div className="max-w-5xl mx-auto">
         {/* Two-column pricing table */}
@@ -83,7 +87,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
           {/* Weekends */}
           <div className="rounded-2xl border border-accent/40 overflow-hidden bg-surface">
             <div className="bg-accent/10 px-6 py-3 border-b border-accent/20">
-              <h3 className="font-heading text-lg font-bold text-accent text-center">Выходные / Праздники</h3>
+              <h3 className="font-heading text-lg font-bold text-accent text-center">{content?.weekendLabel || 'Выходные / Праздники'}</h3>
             </div>
             <div className="divide-y divide-border/50">
               {weekendSlots.map((slot) => (
@@ -115,10 +119,10 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
               <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
                 <Baby className="w-4 h-4 text-accent" />
               </div>
-              <h4 className="font-bold text-text-primary">Детский тариф</h4>
+              <h4 className="font-bold text-text-primary">{content?.childTitle || 'Детский тариф'}</h4>
             </div>
             <div className="space-y-1.5 text-sm text-text-secondary">
-              <p>Дети до 6 лет включительно — <strong className="text-accent">{childUnder6Price.toLocaleString('ru-RU')} ₽</strong> безлимит</p>
+              <p>{childNote}</p>
             </div>
           </div>
 
@@ -128,13 +132,13 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
               <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center">
                 <UserCheck className="w-4 h-4 text-rose-500" />
               </div>
-              <h4 className="font-bold text-text-primary">Льготы для пенсионеров</h4>
+              <h4 className="font-bold text-text-primary">{content?.pensionerTitle || 'Льготы для пенсионеров'}</h4>
             </div>
             <div className="space-y-1.5 text-sm text-text-secondary">
               {pensionerSlots.map((p) => (
                 <p key={p.id}>{p.name} — <strong className="text-primary">{p.price.toLocaleString('ru-RU')} ₽</strong></p>
               ))}
-              <p className="text-xs text-text-secondary/70 pt-1">Пн–Чт, до 18:00 (билет до 16:00)</p>
+              <p className="text-xs text-text-secondary/70 pt-1">{content?.pensionerNote || 'Пн–Чт, до 18:00 (билет до 16:00)'}</p>
             </div>
           </div>
         </div>
@@ -143,7 +147,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
         <div className="mb-10">
           <div className="flex items-center gap-2 mb-6">
             <Crown className="w-5 h-5 text-primary" />
-            <h3 className="font-heading text-xl font-bold text-text-primary">Абонементы</h3>
+            <h3 className="font-heading text-xl font-bold text-text-primary">{content?.subscriptionsTitle || 'Абонементы'}</h3>
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
             {subscriptionSlots.map((sub) => (
@@ -165,7 +169,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
                 <p className="text-sm text-text-secondary mb-3">{sub.description}</p>
                 <p className="text-xl font-bold text-primary">
                   {sub.adultPrice.toLocaleString('ru-RU')}&nbsp;&#8381;
-                  <span className="text-xs text-text-secondary font-normal ml-1">/ мес</span>
+                  <span className="text-xs text-text-secondary font-normal ml-1">{sub.period ? `· ${sub.period}` : '/ мес'}</span>
                 </p>
               </div>
             ))}
@@ -183,6 +187,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
               certificate: {
                 design: cert.design,
                 occasion: cert.occasion,
+                amount: cert.amount,
                 recipientName: cert.recipientName,
                 recipientPhone: cert.recipientPhone,
                 wish: cert.wish,

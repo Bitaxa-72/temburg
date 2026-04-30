@@ -3,27 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import { useBooking } from '@/context/BookingContext';
 import { useSchedule } from '@/hooks/useWordPressData';
-import { scheduleEvents as fallbackEvents, type ScheduleEvent } from '@/data/schedule';
-import type { WPScheduleEvent } from '@/api/wordpress';
-
-function wpToScheduleEvent(wp: WPScheduleEvent): ScheduleEvent {
-  const w = wp as any;
-  const rawDay = w.weekdays || w.day || [];
-  const day = Array.isArray(rawDay) ? rawDay : (typeof rawDay === 'string' ? rawDay.split(',').map((d: string) => d.trim()) : []);
-  const wpType = w.type || (w.isFree ? 'free' : w.price ? 'paid' : 'free');
-  return {
-    id: wp.id || w.id || 0,
-    name: w.title || w.name || '',
-    time: w.time || '',
-    duration: w.duration || '',
-    day,
-    type: w.highlight ? 'special' : wpType === 'free' ? 'free' : 'paid',
-    description: w.description || '',
-    instructor: w.instructor || undefined,
-    price: w.price || undefined,
-    highlight: w.highlight || false,
-  };
-}
+import { mapScheduleData } from '@/utils/scheduleData';
 
 function getCurrentDayName(): string {
   const days = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
@@ -34,9 +14,7 @@ const SchedulePreviewSection = memo(function SchedulePreviewSection() {
   const { openPurchase } = useBooking();
   const navigate = useNavigate();
   const { data: wpSchedule } = useSchedule();
-  const scheduleEvents: ScheduleEvent[] = wpSchedule.length > 0
-    ? wpSchedule.map(wpToScheduleEvent)
-    : fallbackEvents;
+  const scheduleEvents = mapScheduleData(wpSchedule);
   const todayName = getCurrentDayName();
   const previewEvents = scheduleEvents.filter((e) => Array.isArray(e.day) && e.day.includes(todayName));
 

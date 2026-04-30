@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback, useEffect, memo } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { toPng } from 'html-to-image';
 import JsBarcode from 'jsbarcode';
-import { Gift, Sparkles, Heart, Star, Check, Upload, Plus, Move } from 'lucide-react';
+import { Gift, Sparkles, Heart, Star, Check, Plus } from 'lucide-react';
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, '');
@@ -133,6 +133,25 @@ const certificateColors = [
   { id: 'cream', label: 'Молочный', bgClass: 'from-amber-50 via-orange-50 to-yellow-50', light: true },
 ];
 
+const CERT_AMOUNT_MIN = 1000;
+const CERT_AMOUNT_MAX = 99999999;
+const CERT_AMOUNT_STEP = 500;
+const CERT_CAPTURE_WIDTH = 520;
+const CERT_CAPTURE_HEIGHT = 325;
+
+function isValidCertificateAmount(amount: number): boolean {
+  return Number.isFinite(amount)
+    && amount >= CERT_AMOUNT_MIN
+    && amount <= CERT_AMOUNT_MAX
+    && amount % CERT_AMOUNT_STEP === 0;
+}
+
+function normalizeCertificateAmount(amount: number): number {
+  if (!Number.isFinite(amount)) return CERT_AMOUNT_MIN;
+  const clamped = Math.min(CERT_AMOUNT_MAX, Math.max(CERT_AMOUNT_MIN, amount));
+  return Math.round(clamped / CERT_AMOUNT_STEP) * CERT_AMOUNT_STEP;
+}
+
 export type CertificateData = {
   design: string;
   occasion: string;
@@ -186,17 +205,13 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
   }, []);
 
   const [selectedHoliday, setSelectedHoliday] = useState(certificateHolidays[0].id);
-  const [selectedPhoto, setSelectedPhoto] = useState(termlinPhotos[0].id);
   const [certAmount, setCertAmount] = useState(3000);
   const [certWish, setCertWish] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [customHoliday, setCustomHoliday] = useState('');
-  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
-  const [photoPosition, setPhotoPosition] = useState({ x: 50, y: 50 });
   const [selectedColor, setSelectedColor] = useState(certificateColors[0].id);
   const wishRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const colorCarouselRef = useRef<HTMLDivElement>(null);
   const frontPreviewRef = useRef<HTMLDivElement>(null);
   const backPreviewRef = useRef<HTMLDivElement>(null);
@@ -209,19 +224,9 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
 
   const ticketId = ticketIdRef.current;
 
-  const filteredPhotos = getPhotosForHoliday(selectedHoliday);
-  const selectedPhotoData = filteredPhotos.find(p => p.id === selectedPhoto) || filteredPhotos[0];
   const selectedHolidayData = certificateHolidays.find(h => h.id === selectedHoliday) || certificateHolidays[0];
   const selectedColorData = certificateColors.find(c => c.id === selectedColor) || certificateColors[0];
-  const [hasCertificatePhotoError, setHasCertificatePhotoError] = useState(false);
-
-  useEffect(() => {
-    const isPhotoValid = filteredPhotos.some(p => p.id === selectedPhoto) || selectedPhoto === 'custom';
-    if (!isPhotoValid && filteredPhotos.length > 0) {
-      setSelectedPhoto(filteredPhotos[0].id);
-    }
-  }, [selectedHoliday, filteredPhotos, selectedPhoto]);
-
+  const isCertAmountValid = isValidCertificateAmount(certAmount);
 
   // Рендерим реальный Code128 штрихкод в SVG ref'е
   useEffect(() => {
@@ -255,40 +260,11 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
     code: isLightBg ? 'text-black/50' : 'text-white/60',
   };
 
-  const handlePhotoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setCustomPhoto(event.target?.result as string);
-        setSelectedPhoto('custom');
-        setPhotoPosition({ x: 50, y: 50 });
-      };
-      reader.readAsDataURL(file);
-    }
-  }, []);
-
   const getHolidayLabel = () => {
     if (selectedHoliday === 'custom') return customHoliday || 'Мой праздник';
     return selectedHolidayData.label;
   };
-
-  const getCertificatePhoto = () => {
-    if (selectedPhoto === 'custom' && customPhoto) return customPhoto;
-    if (selectedHoliday !== 'custom') {
-      const wpImg = wpCertImageMap[selectedHoliday];
-      if (wpImg) return wpImg;
-      const v1Img = v1baseImages[selectedHoliday];
-      if (v1Img) return v1Img;
-    }
-    return selectedPhotoData.src;
-  };
-  const certificatePhoto = getCertificatePhoto();
-  useEffect(() => {
-    setHasCertificatePhotoError(false);
-  }, [certificatePhoto]);
   const holidayCarouselRef = useRef<HTMLDivElement>(null);
-  const photoCarouselRef = useRef<HTMLDivElement>(null);
 
   const scrollCarousel = (ref: React.RefObject<HTMLDivElement | null>, direction: 'left' | 'right') => {
     if (ref.current) {
@@ -318,20 +294,34 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
     }, 0);
   };
 
+  const captureCertificateSide = (node: HTMLDivElement) => toPng(node, {
+    pixelRatio: 2,
+    cacheBust: true,
+    width: CERT_CAPTURE_WIDTH,
+    height: CERT_CAPTURE_HEIGHT,
+    style: {
+      width: `${CERT_CAPTURE_WIDTH}px`,
+      height: `${CERT_CAPTURE_HEIGHT}px`,
+      maxWidth: 'none',
+    },
+  });
+
   const handleSubmit = async () => {
+    if (!isCertAmountValid) {
+      setCertAmount(prev => normalizeCertificateAmount(prev));
+      return;
+    }
+
     const emojiChars = (certWish.match(/\p{Extended_Pictographic}/gu) || []).join('');
     let frontImage: string | undefined;
     let backImage: string | undefined;
     try {
       setIsCapturing(true);
-      // Захватываем напрямую card — но с отключением overflow:hidden родительского контейнера,
-      // чтобы скруглённые углы и тени не резались на границах PNG.
-      const opts = { pixelRatio: 2, cacheBust: true };
       if (frontPreviewRef.current) {
-        frontImage = await toPng(frontPreviewRef.current, opts);
+        frontImage = await captureCertificateSide(frontPreviewRef.current);
       }
       if (backPreviewRef.current) {
-        backImage = await toPng(backPreviewRef.current, opts);
+        backImage = await captureCertificateSide(backPreviewRef.current);
       }
     } catch (err) {
       console.warn('Failed to capture cert preview:', err);
@@ -347,7 +337,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
       wish: certWish,
       emoji: emojiChars,
       color: selectedColor,
-      photo: selectedPhoto,
+      photo: 'gradient',
       code: ticketId,
       frontImage,
       backImage,
@@ -514,128 +504,8 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm text-text-secondary mb-2">Картинка</label>
-                <div className="relative px-8">
-                  <button
-                    type="button"
-                    onClick={() => scrollCarousel(photoCarouselRef, 'left')}
-                    className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
-                  >
-                    ‹
-                  </button>
-                  <div ref={photoCarouselRef} className="flex gap-2 overflow-x-auto overflow-y-hidden pb-1 scrollbar-hide snap-x snap-mandatory" style={{ clipPath: 'inset(0)' }}>
-                    {filteredPhotos.map((photo) => (
-                      <button
-                        key={photo.id}
-                        type="button"
-                        onClick={() => setSelectedPhoto(photo.id)}
-                        className={`relative flex-shrink-0 w-[calc((100%-16px)/3)] aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all snap-start ${
-                          selectedPhoto === photo.id
-                            ? 'border-primary ring-2 ring-primary/30'
-                            : 'border-border hover:border-primary/40'
-                        }`}
-                      >
-                        <img
-                          src={photo.src}
-                          alt={photo.name}
-                          className="w-full h-full object-cover object-top"
-                        />
-                        <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] px-1 py-0.5 text-center truncate">
-                          {photo.name}
-                        </span>
-                        {selectedPhoto === photo.id && (
-                          <div className="absolute top-1 right-1">
-                            <Check className="w-3 h-3 text-white drop-shadow-lg" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`relative flex-shrink-0 w-[calc((100%-16px)/3)] aspect-[4/3] rounded-lg overflow-hidden border-2 border-dashed transition-all snap-start bg-stone-100 ${
-                        selectedPhoto === 'custom'
-                          ? 'border-primary ring-2 ring-primary/30'
-                          : 'border-stone-300 hover:border-primary/40'
-                      }`}
-                    >
-                      {customPhoto ? (
-                        <img src={customPhoto || undefined} alt="" className="w-full h-full object-cover" style={{ objectPosition: `${photoPosition.x}% ${photoPosition.y}%` }} />
-                      ) : (
-                        <span className="absolute inset-0 flex flex-col items-center justify-center text-stone-500">
-                          <Upload className="w-4 h-4 mb-0.5" />
-                          <span className="text-[9px] font-medium">Загрузить</span>
-                        </span>
-                      )}
-                      {selectedPhoto === 'custom' && customPhoto && (
-                        <div className="absolute top-1 right-1">
-                          <Check className="w-3 h-3 text-white drop-shadow-lg" />
-                        </div>
-                      )}
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhotoUpload}
-                      className="hidden"
-                    />
-                  </div>
-                  {selectedPhoto === 'custom' && customPhoto && (
-                    <div className="mt-2 space-y-2 p-3 bg-stone-100 rounded-lg border border-stone-200">
-                      <div className="flex items-center gap-2 text-xs text-stone-600 font-medium">
-                        <Move className="w-3.5 h-3.5" />
-                        <span>Позиция фото</span>
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <div className="flex justify-between text-[10px] text-stone-500 mb-1">
-                            <span>← Влево</span>
-                            <span>Вправо →</span>
-                          </div>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={photoPosition.x}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              setPhotoPosition(prev => ({ ...prev, x: parseInt(e.target.value, 10) }));
-                            }}
-                            className="w-full h-2 bg-stone-300 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-md"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex justify-between text-[10px] text-stone-500 mb-1">
-                            <span>↑ Вверх</span>
-                            <span>Вниз ↓</span>
-                          </div>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={photoPosition.y}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              setPhotoPosition(prev => ({ ...prev, y: parseInt(e.target.value, 10) }));
-                            }}
-                            className="w-full h-2 bg-stone-300 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-md"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => scrollCarousel(photoCarouselRef, 'right')}
-                    className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
-                  >
-                    ›
-                  </button>
-                </div>
+              <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-text-secondary">
+                Оформление изображения временно отключено. Сертификат будет создан в фирменном градиентном стиле без фото.
               </div>
             </div>
 
@@ -663,9 +533,17 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                 max={99999999}
                 step={500}
                 value={certAmount}
-                onChange={(e) => setCertAmount(Math.min(99999999, Math.max(1000, Number(e.target.value))))}
-                className="w-full rounded-lg bg-background border border-border px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/50 transition-colors"
+                onChange={(e) => setCertAmount(Math.min(CERT_AMOUNT_MAX, Math.max(CERT_AMOUNT_MIN, Number(e.target.value))))}
+                onBlur={() => setCertAmount(prev => normalizeCertificateAmount(prev))}
+                className={`w-full rounded-lg bg-background border px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none transition-colors ${
+                  isCertAmountValid
+                    ? 'border-border focus:border-primary/50'
+                    : 'border-red-400 focus:border-red-400'
+                }`}
               />
+              {!isCertAmountValid && (
+                <p className="mt-1 text-xs text-red-500">Сумма должна быть от 1 000 ₽ и кратна 500 ₽.</p>
+              )}
             </div>
 
             <div>
@@ -723,7 +601,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={isCapturing}
+              disabled={isCapturing || !isCertAmountValid}
               className="w-full rounded-xl bg-primary hover:bg-primary-light disabled:opacity-60 text-dark-surface font-bold py-3 text-base transition-colors shadow-lg shadow-primary/20"
             >
               {isCapturing ? 'Подготовка сертификата…' : (submitLabel ?? `Подарить — ${certAmount.toLocaleString('ru-RU')} ₽`)}
@@ -755,17 +633,6 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                         <p>+7 (909) 167-47-46</p>
                         <p className="text-primary font-semibold">termburg.ru</p>
                       </div>
-                    </div>
-                    <div className={`w-[52%] absolute right-0 inset-y-0 ${hasCertificatePhotoError ? `bg-gradient-to-br ${selectedColorData.bgClass}` : ''}`}>
-                      {!hasCertificatePhotoError && certificatePhoto ? (
-                        <img
-                          src={certificatePhoto}
-                          alt={getHolidayLabel()}
-                          className="w-full h-full object-cover object-top"
-                          style={selectedPhoto === 'custom' ? { objectPosition: `${photoPosition.x}% ${photoPosition.y}%` } : undefined}
-                          onError={() => setHasCertificatePhotoError(true)}
-                        />
-                      ) : null}
                     </div>
                   </div>
                 </div>

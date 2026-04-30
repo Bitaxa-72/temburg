@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldCheck, ListChecks, X, AlertTriangle, Heart, Droplets, Flame, Baby, Ban, Phone, Camera, ScrollText, Star, Loader2, Sparkles, Thermometer, Crown, Leaf } from 'lucide-react';
 import PageLayout from '@/components/layout/PageLayout';
@@ -8,10 +8,11 @@ import Section from '@/components/ui/Section';
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import WPImage from '@/components/ui/WPImage';
-import { zoneCategories, type ZoneCategory, type ZoneItem } from '@/data/zoneCategories';
+import type { ZoneCategory, ZoneItem } from '@/data/zoneCategories';
 import { useTeamWithFallback } from '@/hooks/useDataWithFallback';
-import { usePageContent } from '@/hooks/useWordPressData';
+import { useAboutContent, usePageContent, useZonesData } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
+import { mapZonesDataToCategories } from '@/utils/zonesData';
 
 // Парсит строки вида "до 80°C · влажн. 70%" или "10–12°C" в две части
 function parseTemp(raw?: string): { temp: string; humidity: string | null } {
@@ -563,6 +564,31 @@ export default function AboutPage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «about» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('about');
+  const { data: aboutContent } = useAboutContent();
+  const { data: zonesData } = useZonesData();
+  const zoneCategories = useMemo(() => mapZonesDataToCategories(zonesData.zones), [zonesData.zones]);
+  const displayVisitRules = useMemo(() => {
+    const rules = aboutContent.visitRules
+      ?.map((rule) => {
+        const title = rule.title?.trim() || '';
+        const description = rule.description?.trim() || '';
+        if (title && description) return `${title}: ${description}`;
+        return title || description;
+      })
+      .filter(Boolean);
+
+    return rules?.length ? rules : visitRules;
+  }, [aboutContent.visitRules]);
+  const displayGalleryPhotos = useMemo(() => {
+    const photos = aboutContent.galleryPhotos
+      ?.filter((photo) => photo.image)
+      .map((photo) => ({
+        src: photo.image,
+        alt: photo.alt || photo.caption || 'Термбург',
+      }));
+
+    return photos?.length ? photos : galleryPhotos;
+  }, [aboutContent.galleryPhotos]);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [selectedZone, setSelectedZone] = useState<ZoneCategory | null>(null);
@@ -682,7 +708,7 @@ export default function AboutPage() {
           <div>
             <h3 className="text-xl font-bold text-text-primary mb-4">Фотогалерея</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {galleryPhotos.map((photo, index) => (
+              {displayGalleryPhotos.map((photo, index) => (
                 <button
                   key={index}
                   type="button"
@@ -709,7 +735,7 @@ export default function AboutPage() {
               <span className="text-sm font-medium">Для вашего комфорта и безопасности</span>
             </div>
             <div className="space-y-3">
-              {visitRules.map((rule, index) => (
+              {displayVisitRules.map((rule, index) => (
                 <div
                   key={index}
                   className="flex items-start gap-4 rounded-xl bg-surface p-4 border border-border/50"
@@ -784,7 +810,7 @@ export default function AboutPage() {
       {/* Lightbox */}
       {lightboxIndex !== null && (
         <ImageLightbox
-          images={galleryPhotos}
+          images={displayGalleryPhotos}
           currentIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onNavigate={setLightboxIndex}

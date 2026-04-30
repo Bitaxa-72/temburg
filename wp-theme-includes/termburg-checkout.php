@@ -43,6 +43,11 @@ function termburg_create_order($request) {
         return new WP_REST_Response(array("error" => "Product name and amount required"), 400);
     }
 
+    $is_certificate_order = !empty($params["cert_design"]) || termburg_checkout_contains($product_name, "сертификат");
+    if ($is_certificate_order && !termburg_is_valid_certificate_amount($amount)) {
+        return new WP_REST_Response(array("error" => "Сумма сертификата должна быть от 1 000 ₽ и кратна 500 ₽"), 400);
+    }
+
     if (empty($email)) {
         return new WP_REST_Response(array("error" => "Укажите email для получения чека"), 400);
     }
@@ -196,6 +201,23 @@ function termburg_find_or_create_product($name, $price) {
     if ($generic) return 3882;
 
     return null;
+}
+
+function termburg_is_valid_certificate_amount($amount) {
+    $amount_int = intval(round(floatval($amount)));
+
+    return abs(floatval($amount) - $amount_int) < 0.001
+        && $amount_int >= 1000
+        && $amount_int <= 99999999
+        && $amount_int % 500 === 0;
+}
+
+function termburg_checkout_contains($haystack, $needle) {
+    if (function_exists('mb_stripos')) {
+        return mb_stripos($haystack, $needle, 0, 'UTF-8') !== false;
+    }
+
+    return stripos($haystack, $needle) !== false;
 }
 
 function termburg_get_user_from_token_checkout($request) {

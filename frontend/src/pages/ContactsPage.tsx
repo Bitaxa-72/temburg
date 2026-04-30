@@ -8,7 +8,7 @@ import PageLayout from '@/components/layout/PageLayout';
 import PageHero from '@/components/shared/PageHero';
 import Section from '@/components/ui/Section';
 import { contactInfo as fallbackContact, type RouteDirection } from '@/data/contacts';
-import { useSettings } from '@/hooks/useWordPressData';
+import { useSettings, useContactsContent } from '@/hooks/useWordPressData';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
 
@@ -24,17 +24,25 @@ const routeRtt: Record<RouteDirection['icon'], string> = {
   bus: 'mt',
 };
 
-const partnerDirections = [
+const fallbackPartnerDirections = [
   { icon: Building2, title: 'Корпоративные мероприятия', description: 'Тимбилдинги, корпоративы, праздники' },
   { icon: Megaphone, title: 'Партнёрские программы', description: 'Кросс-маркетинг, совместные акции' },
   { icon: Camera, title: 'Аренда пространств', description: 'Фотосъёмки, мастер-классы, презентации' },
   { icon: PackageOpen, title: 'Поставщикам', description: 'Банные аксессуары, косметика, продукты' },
 ];
 
+const partnerIconMap: Record<string, typeof Building2> = {
+  building: Building2,
+  megaphone: Megaphone,
+  camera: Camera,
+  package: PackageOpen,
+};
+
 export default function ContactsPage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «contacts» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('contacts');
+  const { data: contactsContent } = useContactsContent();
 
   const [partnerForm, setPartnerForm] = useState({ company: '', name: '', email: '', message: '' });
   const [partnerSubmitted, setPartnerSubmitted] = useState(false);
@@ -51,8 +59,15 @@ export default function ContactsPage() {
     address: settings.address || fallbackContact.address,
     metro: settings.metro || fallbackContact.metro,
     workingHours: settings.workingHours || fallbackContact.workingHours,
-    howToGet: fallbackContact.howToGet, // Keep routes from static data
+    howToGet: contactsContent.howToGet?.length ? contactsContent.howToGet : fallbackContact.howToGet,
   };
+
+  const partnerDirections = contactsContent.partnerDirections?.length
+    ? contactsContent.partnerDirections.map((dir) => ({
+        ...dir,
+        icon: partnerIconMap[dir.icon] || Building2,
+      }))
+    : fallbackPartnerDirections;
 
   // Social links from WordPress settings
   const socialLinks = [
@@ -91,7 +106,7 @@ export default function ContactsPage() {
   return (
     <PageLayout title="Контакты" description="Контактная информация термального комплекса Термбург. Адрес, телефон, email и схема проезда.">
       <PageHero
-        title="Контакты"
+        title={contactsContent.heroTitle || 'Контакты'}
         backgroundImage="/images/heroes/contacts.webp"
       />
       {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
@@ -254,7 +269,7 @@ export default function ContactsPage() {
       </Section>
 
       {/* Сотрудничество */}
-      <Section id="partners" title="Сотрудничество" subtitle="Открыты для партнёрства и совместных проектов">
+      <Section id="partners" title={contactsContent.partnersTitle || 'Сотрудничество'} subtitle={contactsContent.partnersSubtitle || 'Открыты для партнёрства и совместных проектов'}>
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12">
           {/* Left — направления */}
           <div className="grid gap-4 sm:grid-cols-2 content-start">

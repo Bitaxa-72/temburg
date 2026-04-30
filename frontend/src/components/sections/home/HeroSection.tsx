@@ -3,7 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import Button from '@/components/ui/Button';
 import Container from '@/components/ui/Container';
 import { useBooking } from '@/context/BookingContext';
-import { useSettings } from '@/hooks/useWordPressData';
+import { useHero } from '@/hooks/useWordPressData';
 import EventCarousel from './TariffCarousel';
 import WinVisitModal from '@/components/shared/WinVisitModal';
 
@@ -32,7 +32,7 @@ const videoSchema = {
 
 export default function HeroSection() {
   const { openBooking } = useBooking();
-  const { data: settings } = useSettings();
+  const { data: hero } = useHero();
   const video1Ref = useRef<HTMLVideoElement>(null);
   const video2Ref = useRef<HTMLVideoElement>(null);
   const [showWinModal, setShowWinModal] = useState(false);
@@ -111,29 +111,29 @@ export default function HeroSection() {
           {/* Left: text content */}
           <div className="flex-1 text-center lg:text-left">
             <h1 className="font-heading text-4xl md:text-5xl lg:text-6xl font-bold leading-tight max-w-4xl">
-              <span className="text-primary">Тепло пожаловать</span>
+              <span className="text-primary">{hero.titleLine1}</span>
               <br />
-              <span className="text-warm-white">в Термбург</span>
+              <span className="text-warm-white">{hero.titleLine2}</span>
             </h1>
 
             <p className="font-heading text-sm md:text-base tracking-[0.3em] text-primary mt-4 uppercase">
-              Термальный комплекс
+              {hero.eyebrow}
             </p>
 
             <p className="mt-6 text-lg md:text-xl text-warm-white/90 max-w-2xl leading-relaxed">
-              Пространство энергии, гармонии и заботы о вашем здоровье
+              {hero.description}
             </p>
 
             <div className="mt-10 flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4 flex-wrap">
               <Button variant="primary" size="lg" onClick={openBooking}>
-                Хочу пойти
+                {hero.primaryButtonText}
               </Button>
               <Button
                 variant="outline"
                 size="lg"
                 href="/about"
               >
-                Узнать больше
+                {hero.secondaryButtonText}
               </Button>
               {/* Кнопка игры скрыта — раскомментировать при необходимости
               <button
@@ -147,7 +147,7 @@ export default function HeroSection() {
             </div>
 
             <p className="mt-12 text-sm text-warm-white/70">
-              {settings?.workingHours || 'Ежедневно 9:00–23:00 (1-й пн месяца — сан. день)'} &middot; {settings?.address || 'Гурьянова, 30 (Серф Плаза, 2 эт.)'} &middot; {settings?.metro || 'м. Печатники'}
+              {hero.bottomText}
             </p>
           </div>
 

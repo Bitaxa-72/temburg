@@ -3,9 +3,11 @@ import { Flame, Heart, Clock, Sparkles, Users } from 'lucide-react';
 import Section from '@/components/ui/Section';
 import Card from '@/components/ui/Card';
 import { useBooking } from '@/context/BookingContext';
+import { useAdvantages } from '@/hooks/useWordPressData';
 
 const advantages = [
   {
+    key: 'steam',
     icon: Flame,
     title: 'Более 10 видов парных',
     description:
@@ -13,6 +15,7 @@ const advantages = [
     to: '#bani',
   },
   {
+    key: 'schedule',
     icon: Clock,
     title: 'Гибкое расписание',
     description:
@@ -20,6 +23,7 @@ const advantages = [
     to: '/schedule',
   },
   {
+    key: 'services',
     icon: Sparkles,
     title: 'Парения и SPA',
     description:
@@ -27,6 +31,7 @@ const advantages = [
     to: '/services',
   },
   {
+    key: 'health',
     icon: Heart,
     title: 'Забота о здоровье',
     description:
@@ -34,6 +39,7 @@ const advantages = [
     action: 'clay',
   },
   {
+    key: 'family',
     icon: Users,
     title: 'Семейный отдых',
     description:
@@ -60,20 +66,33 @@ function AdvantageCard({ item }: { item: typeof advantages[0] }) {
 
 export default function AdvantagesSection() {
   const { openClayModal } = useBooking();
+  const { data: advantagesData } = useAdvantages();
 
   const scrollToSection = (selector: string) => {
     document.querySelector(selector)?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const adminCards = new Map(
+    advantagesData.cards.map((card) => [card.key, card])
+  );
+  const renderedAdvantages = advantages.map((item) => {
+    const adminCard = adminCards.get(item.key as typeof advantagesData.cards[number]['key']);
+    return {
+      ...item,
+      title: adminCard?.title || item.title,
+      description: adminCard?.description || item.description,
+    };
+  });
+
   return (
     <Section
       warm
       separator
-      title="Почему Термбург"
-      subtitle="Всё для вашего здоровья и отдыха в одном месте"
+      title={advantagesData.title}
+      subtitle={advantagesData.subtitle}
     >
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 md:gap-5">
-        {advantages.map((item) =>
+        {renderedAdvantages.map((item) =>
           'action' in item && item.action === 'clay' ? (
             <button
               key={item.title}

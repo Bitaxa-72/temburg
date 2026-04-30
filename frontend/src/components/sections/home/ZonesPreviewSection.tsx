@@ -1,11 +1,13 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { X, Thermometer } from 'lucide-react';
 import Section from '@/components/ui/Section';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import WPImage from '@/components/ui/WPImage';
 import { useBooking } from '@/context/BookingContext';
-import { zoneCategories as localZoneCategories, type ZoneItem, type ZoneCategory } from '@/data/zoneCategories';
+import { useZonesData } from '@/hooks/useWordPressData';
+import type { ZoneItem, ZoneCategory } from '@/data/zoneCategories';
+import { mapZonesDataToCategories } from '@/utils/zonesData';
 
 function ZoneItemModal({ item, onClose }: { item: ZoneItem; onClose: () => void }) {
   useEffect(() => {
@@ -120,36 +122,23 @@ function ZoneModal({ zone, onClose }: { zone: ZoneCategory; onClose: () => void 
   );
 }
 
+function filled(value: string | undefined | null, fallback: string): string {
+  return value && value.trim() ? value : fallback;
+}
+
 const ZonesPreviewSection = memo(function ZonesPreviewSection() {
   const [selectedZone, setSelectedZone] = useState<ZoneCategory | null>(null);
   const { openWhatToBring } = useBooking();
+  const { data } = useZonesData();
 
-  const [wpZones, setWpZones] = useState<ZoneCategory[] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/wp-json/termburg/v1/zones')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!cancelled && data) {
-          // If WP returns an array of zone categories, use directly; otherwise try to map
-          if (Array.isArray(data) && data.length > 0) {
-            setWpZones(data);
-          } else if (typeof data === 'object' && Object.keys(data).length > 0) {
-            setWpZones(Object.values(data));
-          }
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-  const zoneCategories = wpZones || localZoneCategories;
+  const zoneCategories = useMemo(() => mapZonesDataToCategories(data.zones), [data.zones]);
 
   return (
     <Section
       id="bani"
       warm
-      title="Наши зоны"
-      subtitle="Парные, бассейны, купели и джакузи для вашего отдыха"
+      title={filled(data.title, 'Наши зоны')}
+      subtitle={filled(data.subtitle, 'Парные, бассейны, купели и джакузи для вашего отдыха')}
     >
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {zoneCategories.map((zone) => (
@@ -177,10 +166,10 @@ const ZonesPreviewSection = memo(function ZonesPreviewSection() {
 
       <div className="mt-8 flex flex-col items-center gap-3">
         <Button variant="outline" size="sm" href="/pricing">
-          Купить билет
+          {filled(data.buyButtonText, 'Купить билет')}
         </Button>
         <button onClick={openWhatToBring} className="text-sm text-text-secondary hover:text-primary transition-colors underline underline-offset-2">
-          Не забудьте взять с собой →
+          {filled(data.whatToBringText, 'Не забудьте взять с собой →')}
         </button>
       </div>
 

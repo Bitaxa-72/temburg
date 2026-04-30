@@ -4,6 +4,7 @@ import type { BathType } from '@/data/thermalZones';
 export interface CertificateMeta {
   design: string;
   occasion: string;
+  amount: number;
   recipientName: string;
   recipientPhone: string;
   wish: string;

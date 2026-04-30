@@ -6,7 +6,7 @@ import Section from '@/components/ui/Section';
 import Badge from '@/components/ui/Badge';
 import { useBooking } from '@/context/BookingContext';
 import { swimmingSchool, type SchoolProgram } from '@/data/services';
-import { usePageContent } from '@/hooks/useWordPressData';
+import { usePageContent, useSchoolsContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
 
 const SITE_URL = 'https://termburg.ceosivaev.ru';
@@ -97,12 +97,32 @@ export default function SwimmingSchoolPage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «swimming-school» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('swimming-school');
+  const { data: schoolsContent } = useSchoolsContent();
+  const schoolContent = schoolsContent.swimming;
+  const programs = useMemo<SchoolProgram[]>(() => {
+    if (!schoolContent.programs?.length) return swimmingSchool;
+
+    return schoolContent.programs.map((program, index) => {
+      const fallback = swimmingSchool[index];
+
+      return {
+        ...program,
+        image: program.image || fallback?.image || '/images/swimming-school.jpg',
+        fullDescription: program.fullDescription || program.description || fallback?.fullDescription || '',
+        includes: program.includes?.length ? program.includes : fallback?.includes || [],
+      };
+    });
+  }, [schoolContent.programs]);
+  const schoolAdvantages = schoolContent.advantages?.length ? schoolContent.advantages : advantages;
+  const introParagraphs = schoolContent.introText
+    ? schoolContent.introText.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+    : null;
 
   const { openBooking, openSwimmingEnrollment } = useBooking();
   const [selected, setSelected] = useState<SchoolProgram | null>(null);
 
   // Course schema for SEO
-  const courseSchema = useMemo(() => swimmingSchool.filter(p => p.price > 0).map((program) => ({
+  const courseSchema = useMemo(() => programs.filter(p => p.price > 0).map((program) => ({
     '@context': 'https://schema.org',
     '@type': 'Course',
     name: program.name,
@@ -132,7 +152,7 @@ export default function SwimmingSchoolPage() {
         },
       },
     },
-  })), []);
+  })), [programs]);
 
   return (
     <PageLayout
@@ -141,8 +161,8 @@ export default function SwimmingSchoolPage() {
       schema={courseSchema}
     >
       <PageHero
-        title="Школа плавания"
-        subtitle="Обучение плаванию для детей и взрослых в тёплом термальном бассейне"
+        title={schoolContent.heroTitle || 'Школа плавания'}
+        subtitle={schoolContent.heroSubtitle || 'Обучение плаванию для детей и взрослых в тёплом термальном бассейне'}
         backgroundImage="/images/heroes/swimming-school.webp"
       />
       {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
@@ -153,25 +173,31 @@ export default function SwimmingSchoolPage() {
           <div className="flex-1 space-y-4">
             <div className="flex items-center gap-2">
               <Waves className="h-6 w-6 text-info" />
-              <h2 className="text-2xl font-bold text-text-primary">Плавание в Термбурге</h2>
+              <h2 className="text-2xl font-bold text-text-primary">{schoolContent.introTitle || 'Плавание в Термбурге'}</h2>
             </div>
-            <p className="text-lg leading-relaxed text-text-secondary">
-              Термбург приглашает детей в возрасте от 6 до 12 лет на занятия в Школу Плавания.
-              Мини-группы из 4–6 человек обеспечивают индивидуальный подход к каждому ребёнку.
-            </p>
-            <p className="text-lg leading-relaxed text-text-secondary">
-              Расписание: пятница — 16:00, воскресенье — 10:00. Стоимость абонемента на месяц — 8000 рублей за 8 занятий по 45 минут.
-              Формирование групп осуществляется исходя из уровня навыков детей.
-            </p>
+            {introParagraphs ? introParagraphs.map((text) => (
+              <p key={text} className="text-lg leading-relaxed text-text-secondary">{text}</p>
+            )) : (
+              <>
+                <p className="text-lg leading-relaxed text-text-secondary">
+                  Термбург приглашает детей в возрасте от 6 до 12 лет на занятия в Школу Плавания.
+                  Мини-группы из 4–6 человек обеспечивают индивидуальный подход к каждому ребёнку.
+                </p>
+                <p className="text-lg leading-relaxed text-text-secondary">
+                  Расписание: пятница — 16:00, воскресенье — 10:00. Стоимость абонемента на месяц — 8000 рублей за 8 занятий по 45 минут.
+                  Формирование групп осуществляется исходя из уровня навыков детей.
+                </p>
+              </>
+            )}
           </div>
-          <img src="/images/swimming-school.jpg" alt="Школа плавания Термбурга" className="w-full md:w-72 h-48 md:h-56 rounded-2xl object-cover flex-shrink-0" />
+          <img src={schoolContent.introImage || '/images/swimming-school.jpg'} alt="Школа плавания Термбурга" className="w-full md:w-72 h-48 md:h-56 rounded-2xl object-cover flex-shrink-0" />
         </div>
       </Section>
 
       {/* Advantages */}
       <Section title="Преимущества" warm>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {advantages.map((text) => (
+          {schoolAdvantages.map((text) => (
             <div key={text} className="flex items-center gap-3 rounded-xl bg-surface p-4 border border-border/50">
               <CheckCircle className="h-5 w-5 flex-shrink-0 text-success" />
               <span className="text-text-primary font-medium text-sm">{text}</span>
@@ -183,7 +209,7 @@ export default function SwimmingSchoolPage() {
       {/* Programs */}
       <Section title="Программы" subtitle="Нажмите на карточку, чтобы узнать подробности">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {swimmingSchool.map((program) => (
+          {programs.map((program) => (
             <ProgramCard key={program.id} program={program} onSelect={() => setSelected(program)} />
           ))}
         </div>
@@ -192,7 +218,7 @@ export default function SwimmingSchoolPage() {
       {/* Pricing */}
       <Section warm title="Абонементы и услуги" subtitle="Выберите подходящий вариант">
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {swimmingSchool.map((program) => (
+          {programs.map((program) => (
             <div
               key={program.id}
               className="rounded-2xl bg-surface border border-border/50 p-5 flex flex-col hover:border-primary/30 hover:shadow-lg transition-all"

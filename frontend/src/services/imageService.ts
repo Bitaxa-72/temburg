@@ -29,14 +29,21 @@ export interface ImageMapping {
   [localPath: string]: ImageMappingEntry;
 }
 
+function isExternalImageUrl(path: string): boolean {
+  return /^(https?:)?\/\//i.test(path) || /^data:/i.test(path) || /^blob:/i.test(path);
+}
+
 /**
  * Normalize local path to consistent format
  * Removes leading /images/ prefix if present
  */
 export function normalizeImagePath(path: string): string {
   if (!path) return '';
+  const trimmed = path.trim();
+  if (isExternalImageUrl(trimmed)) return trimmed;
+
   // Remove leading slash and /images/ prefix
-  let normalized = path.replace(/^\/+/, '');
+  let normalized = trimmed.replace(/^\/+/, '');
   if (normalized.startsWith('images/')) {
     normalized = normalized.substring(7);
   }
@@ -49,6 +56,8 @@ export function normalizeImagePath(path: string): string {
 export function toLocalUrl(path: string): string {
   const normalized = normalizeImagePath(path);
   if (!normalized) return '';
+  if (isExternalImageUrl(normalized)) return normalized;
+
   return `${LOCAL_IMAGES_BASE}/${normalized}`;
 }
 
@@ -133,6 +142,7 @@ export async function getImageUrl(
 ): Promise<string> {
   const normalized = normalizeImagePath(localPath);
   if (!normalized) return '';
+  if (isExternalImageUrl(normalized)) return normalized;
 
   try {
     const mapping = await getImageMapping();
@@ -165,6 +175,7 @@ export function getImageUrlSync(
 ): string {
   const normalized = normalizeImagePath(localPath);
   if (!normalized) return '';
+  if (isExternalImageUrl(normalized)) return normalized;
 
   // Try cached mapping
   if (imageMapping) {
@@ -195,6 +206,10 @@ export async function getImageUrls(
   for (const path of paths) {
     const normalized = normalizeImagePath(path);
     if (!normalized) continue;
+    if (isExternalImageUrl(normalized)) {
+      result[path] = normalized;
+      continue;
+    }
 
     const entry = mapping[normalized];
     result[path] = entry?.url || toLocalUrl(normalized);

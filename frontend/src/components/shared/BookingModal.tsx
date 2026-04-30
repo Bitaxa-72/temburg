@@ -127,7 +127,7 @@ export default function BookingModal() {
   const [selectedSub, setSelectedSub] = useState(subscriptions[0].id);
   const [canScrollDown, setCanScrollDown] = useState(false);
   const [showWhatToBring, setShowWhatToBring] = useState(false);
-  const [fridayTime, setFridayTime] = useState<'before16' | 'after16'>('before16');
+  const [fridayTime, setFridayTime] = useState<'before18' | 'after18'>('before18');
   const [addVisit, setAddVisit] = useState(false);
   const [visitTariff, setVisitTariff] = useState('unlimited');
   const [visitDate, setVisitDate] = useState('');
@@ -147,7 +147,7 @@ export default function BookingModal() {
     if (!addVisit || !visitDate) return 0;
     const useWeekendPricing = isSpecialWeekendDate(visitDate, specialWeekendDates)
       || isWeekend(visitDate)
-      || (isFriday(visitDate) && fridayTime === 'after16');
+      || (isFriday(visitDate) && fridayTime === 'after18');
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     const nameMap: Record<string, string> = {
       '1h': '1 час',
@@ -181,10 +181,10 @@ export default function BookingModal() {
       return (spa?.price ?? 0) + visitPrice;
     }
     if (!date) return 0;
-    // Пятница после 16:00 = тариф выходных
+    // Пятница после 18:00 = тариф выходных
     const useWeekendPricing = isSpecialWeekendDate(date, specialWeekendDates)
       || isWeekend(date)
-      || (isFriday(date) && fridayTime === 'after16');
+      || (isFriday(date) && fridayTime === 'after18');
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     const nameMap: Record<string, string> = {
       '1h': '1 час',
@@ -250,7 +250,7 @@ export default function BookingModal() {
       setCertWish('');
       setSelectedSub(subscriptions[0].id);
       setShowWhatToBring(false);
-      setFridayTime('before16');
+      setFridayTime('before18');
       setAddVisit(false);
       setVisitTariff('unlimited');
       setVisitDate('');
@@ -368,26 +368,26 @@ export default function BookingModal() {
                       <div className="flex gap-2">
                         <button
                           type="button"
-                          onClick={() => setFridayTime('before16')}
+                          onClick={() => setFridayTime('before18')}
                           className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-                            fridayTime === 'before16'
+                            fridayTime === 'before18'
                               ? 'bg-primary text-white'
                               : 'bg-surface-warm text-text-secondary hover:bg-border'
                           }`}
                         >
-                          До 16:00
+                          До 18:00
                           <span className="block text-xs opacity-80">тариф будней</span>
                         </button>
                         <button
                           type="button"
-                          onClick={() => setFridayTime('after16')}
+                          onClick={() => setFridayTime('after18')}
                           className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-                            fridayTime === 'after16'
+                            fridayTime === 'after18'
                               ? 'bg-accent text-white'
                               : 'bg-surface-warm text-text-secondary hover:bg-border'
                           }`}
                         >
-                          После 16:00
+                          После 18:00
                           <span className="block text-xs opacity-80">тариф выходных</span>
                         </button>
                       </div>
@@ -522,8 +522,8 @@ export default function BookingModal() {
                         />
                         {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && (
                           <div className="mt-2 flex gap-2">
-                            <button type="button" onClick={() => setFridayTime('before16')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before16' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 16:00</button>
-                            <button type="button" onClick={() => setFridayTime('after16')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after16' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 16:00</button>
+                            <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
+                            <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
                           </div>
                         )}
                       </div>
@@ -602,8 +602,8 @@ export default function BookingModal() {
                         />
                         {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && (
                           <div className="mt-2 flex gap-2">
-                            <button type="button" onClick={() => setFridayTime('before16')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before16' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 16:00</button>
-                            <button type="button" onClick={() => setFridayTime('after16')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after16' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 16:00</button>
+                            <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
+                            <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
                           </div>
                         )}
                       </div>
@@ -682,8 +682,8 @@ export default function BookingModal() {
                         />
                         {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && (
                           <div className="mt-2 flex gap-2">
-                            <button type="button" onClick={() => setFridayTime('before16')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before16' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 16:00</button>
-                            <button type="button" onClick={() => setFridayTime('after16')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after16' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 16:00</button>
+                            <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
+                            <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
                           </div>
                         )}
                       </div>
@@ -721,6 +721,7 @@ export default function BookingModal() {
                     certificate: {
                       design: cert.design,
                       occasion: cert.occasion,
+                      amount: cert.amount,
                       recipientName: cert.recipientName,
                       recipientPhone: cert.recipientPhone,
                       wish: cert.wish,
@@ -812,7 +813,7 @@ export default function BookingModal() {
                 {bookingType === 'visit' && date && (
                   <p className="mt-1 text-xs text-text-secondary">
                     {adults} взр.{children > 0 ? ` + ${children} дет.` : ''} &middot;{' '}
-                    {isSpecialWeekendDate(date, specialWeekendDates) || isWeekend(date) || (isFriday(date) && fridayTime === 'after16') ? 'выходной' : 'будни'} &middot;{' '}
+                    {isSpecialWeekendDate(date, specialWeekendDates) || isWeekend(date) || (isFriday(date) && fridayTime === 'after18') ? 'выходной' : 'будни'} &middot;{' '}
                     {tariffOptions.find((t) => t.id === tariff)?.label}
                   </p>
                 )}

@@ -5,6 +5,9 @@ import ScrollToTopButton from '@/components/shared/ScrollToTopButton';
 import CookieConsent from '@/components/shared/CookieConsent';
 import { useBooking } from '@/context/BookingContext';
 import { useImagePreloader } from '@/hooks/useImage';
+import OfferPage from '@/pages/OfferPage';
+import PrivacyPage from '@/pages/PrivacyPage';
+import RulesPage from '@/pages/RulesPage';
 
 // Lazy load modals - they're only needed when opened
 const BookingModal = lazy(() => import('@/components/shared/BookingModal'));
@@ -27,14 +30,11 @@ const TermlinyPage = lazy(() => import('@/pages/TermlinyPage'));
 const NewsPage = lazy(() => import('@/pages/NewsPage'));
 const PartnersPage = lazy(() => import('@/pages/PartnersPage'));
 const CareersPage = lazy(() => import('@/pages/CareersPage'));
-const OfferPage = lazy(() => import('@/pages/OfferPage'));
-const PrivacyPage = lazy(() => import('@/pages/PrivacyPage'));
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const AccountPage = lazy(() => import('@/pages/AccountPage'));
 const SwimmingSchoolPage = lazy(() => import('@/pages/SwimmingSchoolPage'));
 const SteamSchoolPage = lazy(() => import('@/pages/SteamSchoolPage'));
 const FamilyPage = lazy(() => import('@/pages/FamilyPage'));
-const RulesPage = lazy(() => import('@/pages/RulesPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const MapPage = lazy(() => import('@/pages/MapPage'));
 const GalleryPage = lazy(() => import('@/pages/GalleryPage'));

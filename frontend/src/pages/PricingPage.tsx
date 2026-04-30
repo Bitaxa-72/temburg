@@ -27,6 +27,7 @@ import Container from '@/components/ui/Container';
 import { useBooking } from '@/context/BookingContext';
 import { usePricing } from '@/hooks/useWordPressData';
 import PricingPreviewSection from '@/components/sections/home/PricingPreviewSection';
+import type { WPGiftBox, WPMerchItem } from '@/api/wordpress';
 
 const serviceLinks = [
   { name: 'Парения и SPA', image: '/images/heroes/services.webp', href: '/services' },
@@ -43,8 +44,8 @@ import {
   childUnder6Price,
   overtimeRates,
   subscriptions as fallbackSubscriptions,
-  giftBoxes,
-  merchItems,
+  giftBoxes as fallbackGiftBoxes,
+  merchItems as fallbackMerchItems,
 } from '@/data/pricing';
 import { includedServices } from '@/data/services';
 import { usePageContent } from '@/hooks/useWordPressData';
@@ -63,6 +64,7 @@ function PricingCards() {
   const { openPurchase } = useBooking();
   const [tab, setTab] = useState<'weekday' | 'weekend'>('weekday');
   const { data: wpPricing, loading } = usePricing();
+  const content = wpPricing.pricingContent;
 
   // Use WordPress data if available, fallback to static
   const weekdayPricing = wpPricing.weekday.length > 0
@@ -71,9 +73,18 @@ function PricingCards() {
   const weekendPricing = wpPricing.weekend.length > 0
     ? wpPricing.weekend.map(p => ({ ...p, id: String(p.id) }))
     : fallbackWeekend;
+  const pensionerSlots = wpPricing.pensioner && wpPricing.pensioner.length > 0
+    ? wpPricing.pensioner.map((p) => ({ ...p, id: String(p.id) }))
+    : pensionerPricing;
+  const activeOvertimeRates = wpPricing.overtime && wpPricing.overtime.length > 0
+    ? wpPricing.overtime
+    : overtimeRates;
+  const childPrice = wpPricing.childUnder6 ?? childUnder6Price;
+  const childNote = (content?.childNote || 'Дети до 6 лет включительно — {price} ₽ безлимит')
+    .replace('{price}', childPrice.toLocaleString('ru-RU'));
 
   const pricing = tab === 'weekday' ? weekdayPricing : weekendPricing;
-  const tabLabel = tab === 'weekday' ? 'Будни' : 'Выходные';
+  const tabLabel = tab === 'weekday' ? (content?.weekdayLabel || 'Будни') : (content?.weekendLabel || 'Выходные');
 
   if (loading) {
     return (
@@ -97,7 +108,7 @@ function PricingCards() {
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
-            Будни
+            {content?.weekdayLabel || 'Будни'}
           </button>
           <button
             type="button"
@@ -108,11 +119,11 @@ function PricingCards() {
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
-            Выходные / Праздники
+            {content?.weekendLabel || 'Выходные / Праздники'}
           </button>
         </div>
         <p className="text-xs text-text-secondary/70 mt-3">
-          Пятница: до 16:00 — тариф будней, после 16:00 — тариф выходных
+          {content?.fridayNote || 'Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных'}
         </p>
       </div>
 
@@ -192,16 +203,29 @@ function PricingCards() {
               <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center">
                 <UserCheck className="w-4 h-4 text-rose-500" />
               </div>
-              <h4 className="font-bold text-text-primary">Льготы для пенсионеров</h4>
+              <h4 className="font-bold text-text-primary">{content?.pensionerTitle || 'Льготы для пенсионеров'}</h4>
             </div>
             <div className="space-y-1.5 text-sm text-text-secondary">
-              {pensionerPricing.map((p) => (
+              {pensionerSlots.map((p) => (
                 <p key={p.id}>{p.name} — <strong className="text-primary">{p.price.toLocaleString('ru-RU')} ₽</strong></p>
               ))}
-              <p className="text-xs text-text-secondary/70 pt-1">Действует пн–чт включительно, до 18:00 (билет до 16:00)</p>
+              <p className="text-xs text-text-secondary/70 pt-1">{content?.pensionerNote || 'Действует пн–чт включительно, до 18:00 (билет до 16:00)'}</p>
             </div>
           </div>
         )}
+
+        {/* Child tariff */}
+        <div className="rounded-xl bg-surface border border-border/50 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+              <Baby className="w-4 h-4 text-accent" />
+            </div>
+            <h4 className="font-bold text-text-primary">{content?.childTitle || 'Детский тариф'}</h4>
+          </div>
+          <div className="space-y-1.5 text-sm text-text-secondary">
+            <p>{childNote}</p>
+          </div>
+        </div>
 
         {/* Overtime rates */}
         <div className="rounded-xl bg-surface border border-border/50 p-5">
@@ -212,9 +236,9 @@ function PricingCards() {
             <h4 className="font-bold text-text-primary">Доплата за превышение</h4>
           </div>
           <div className="space-y-1.5 text-sm text-text-secondary">
-            <p>Будни — <strong className="text-primary">{overtimeRates.find(r => r.type === 'weekday')?.ratePerMin} ₽/мин</strong></p>
-            <p>Выходные — <strong className="text-primary">{overtimeRates.find(r => r.type === 'weekend')?.ratePerMin} ₽/мин</strong></p>
-            <p>Льготный — <strong className="text-primary">{overtimeRates.find(r => r.type === 'pensioner')?.ratePerMin} ₽/мин</strong></p>
+            <p>Будни — <strong className="text-primary">{activeOvertimeRates.find(r => r.type === 'weekday')?.ratePerMin} ₽/мин</strong></p>
+            <p>Выходные — <strong className="text-primary">{activeOvertimeRates.find(r => r.type === 'weekend')?.ratePerMin} ₽/мин</strong></p>
+            <p>Льготный — <strong className="text-primary">{activeOvertimeRates.find(r => r.type === 'pensioner')?.ratePerMin} ₽/мин</strong></p>
           </div>
         </div>
       </div>
@@ -378,10 +402,6 @@ function CertificateSection({ openPurchase }: { openPurchase: (data: { name: str
   }, []);
 
   const certificateCategories = certCats;
-  const [selectedCategory, setSelectedCategory] = useState(certificateCategories[0].id);
-  const [selectedImage, setSelectedImage] = useState(certificateCategories[0].images[0].id);
-
-  const currentCategory = certificateCategories.find((c: any) => c.id === selectedCategory) || certificateCategories[0];
 
   return (
     <div className="relative rounded-2xl overflow-hidden">
@@ -434,56 +454,8 @@ function CertificateSection({ openPurchase }: { openPurchase: (data: { name: str
               openPurchase({ name: 'Подарочный сертификат', price: 'Индивидуальная сумма' });
             }}
           >
-            {/* Image selection */}
-            <div>
-              <label className="block text-sm text-text-secondary mb-2">Выберите дизайн</label>
-              {/* Category tabs */}
-              <div className="flex gap-1 mb-3">
-                {certificateCategories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCategory(cat.id);
-                      const firstImg = certificateCategories.find(c => c.id === cat.id)?.images[0];
-                      if (firstImg) setSelectedImage(firstImg.id);
-                    }}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                      selectedCategory === cat.id
-                        ? 'bg-primary text-dark-surface'
-                        : 'bg-background text-text-secondary hover:bg-primary/10'
-                    }`}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-              {/* Image grid */}
-              <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
-                {currentCategory.images.map((img: any) => (
-                  <button
-                    key={img.id}
-                    type="button"
-                    onClick={() => setSelectedImage(img.id)}
-                    title={img.label}
-                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-                      selectedImage === img.id
-                        ? 'border-primary ring-2 ring-primary/20'
-                        : 'border-border hover:border-primary/40'
-                    }`}
-                  >
-                    <img src={img.src} alt={img.label} className="w-full h-full object-cover" />
-                    {selectedImage === img.id && (
-                      <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                        <Check className="w-5 h-5 text-white drop-shadow-lg" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-text-secondary/60 mt-1.5">
-                {currentCategory.images.find((i: any) => i.id === selectedImage)?.label || 'Выбрано'}
-              </p>
+            <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-text-secondary">
+              Выбор изображений для сертификата временно отключен. Сертификат оформляется в фирменном стиле Термбурга без выбора картинки.
             </div>
 
             <div>
@@ -539,7 +511,7 @@ function GiftBoxCard({
   box,
   onPurchase,
 }: {
-  box: typeof giftBoxes[0];
+  box: WPGiftBox | typeof fallbackGiftBoxes[0];
   onPurchase: () => void;
 }) {
   return (
@@ -557,7 +529,7 @@ function GiftBoxCard({
       {/* Image */}
       <div className="relative h-[42rem] overflow-hidden">
         <img
-          src={box.image}
+          src={box.image || '/images/heroes/pricing.webp'}
           alt={box.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
@@ -574,6 +546,9 @@ function GiftBoxCard({
       <div className="p-6 flex flex-col flex-1">
         {/* Items list */}
         <div className="space-y-3 mb-6 flex-1">
+          {box.items.length === 0 && box.contents && (
+            <p className="text-sm text-text-secondary">{box.contents}</p>
+          )}
           {box.items.map((item, i) => (
             <div key={i} className="flex items-start gap-3">
               <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -613,18 +588,32 @@ export default function PricingPage() {
 
   const { openBooking, openPurchase, openWhatToBring } = useBooking();
   const { data: wpPricing } = usePricing();
+  const pricingContent = wpPricing.pricingContent;
 
   // Use WordPress subscriptions if available
   const subscriptions = wpPricing.subscriptions.length > 0
     ? wpPricing.subscriptions.map(s => ({
         id: String(s.id),
         name: s.name,
-        period: s.duration,
+        period: s.period || s.duration,
         adultPrice: s.adultPrice,
         discount: s.discount || 0,
         description: s.description || '',
+        badge: s.badge || '',
+        badgeVariant: s.badgeVariant || undefined,
       }))
-    : fallbackSubscriptions;
+    : fallbackSubscriptions.map(s => ({
+        ...s,
+        badge: '',
+        badgeVariant: undefined,
+      }));
+  const giftBoxes: Array<WPGiftBox | typeof fallbackGiftBoxes[0]> =
+    wpPricing.giftBoxes && wpPricing.giftBoxes.length > 0 ? wpPricing.giftBoxes : fallbackGiftBoxes;
+  const merchItems: Array<WPMerchItem | typeof fallbackMerchItems[0]> =
+    wpPricing.merchItems && wpPricing.merchItems.length > 0 ? wpPricing.merchItems : fallbackMerchItems;
+  const includedItems = pricingContent?.includedItems && pricingContent.includedItems.length > 0
+    ? pricingContent.includedItems
+    : includedServices;
 
   return (
     <PageLayout>
@@ -636,14 +625,18 @@ export default function PricingPage() {
       {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
 
       {/* ── Tariff cards ── */}
-      <Section title="Стоимость посещения" subtitle="Выберите удобный тариф — от 1 часа до безлимита на весь день" className="py-10">
+      <Section
+        title={pricingContent?.pageTariffsTitle || 'Стоимость посещения'}
+        subtitle={pricingContent?.pageTariffsSubtitle || 'Выберите удобный тариф — от 1 часа до безлимита на весь день'}
+        className="py-10"
+      >
         <PricingCards />
       </Section>
 
       {/* ── What's included ── */}
-      <Section title="Включено в стоимость посещения" className="py-10" warm>
+      <Section title={pricingContent?.includedTitle || 'Включено в стоимость посещения'} className="py-10" warm>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {includedServices.map((service) => (
+          {includedItems.map((service) => (
             <div
               key={service}
               className="flex items-center gap-3 rounded-xl bg-surface p-4 border border-border/50"
@@ -689,8 +682,8 @@ export default function PricingPage() {
 
       {/* ── Subscriptions (with CTA) ── */}
       <Section
-        title="Абонементы"
-        subtitle="Выгодные предложения для постоянных гостей"
+        title={pricingContent?.subscriptionsTitle || 'Абонементы'}
+        subtitle={pricingContent?.subscriptionsSubtitle || 'Выгодные предложения для постоянных гостей'}
         className="py-10"
       >
         <div className="space-y-4">
@@ -704,8 +697,8 @@ export default function PricingPage() {
                 price={sub.adultPrice}
                 discount={sub.discount}
                 description={sub.description}
-                badge={highlight?.badge}
-                badgeVariant={highlight?.badgeVariant}
+                badge={sub.badge || highlight?.badge}
+                badgeVariant={(sub.badgeVariant as 'default' | 'gold' | 'success' | undefined) || highlight?.badgeVariant}
                 onPurchase={() => openPurchase({ name: `Абонемент «${sub.name}»`, price: `${sub.adultPrice.toLocaleString('ru-RU')} ₽` })}
               />
             );
@@ -718,8 +711,8 @@ export default function PricingPage() {
 
       {/* ── Premium Gift boxes ── */}
       <Section
-        title="Подарочные боксы"
-        subtitle="Роскошные наборы в премиальной упаковке — готовый подарок, который запомнится"
+        title={pricingContent?.giftBoxesTitle || 'Подарочные боксы'}
+        subtitle={pricingContent?.giftBoxesSubtitle || 'Роскошные наборы в премиальной упаковке — готовый подарок, который запомнится'}
         className="py-10"
       >
         <div className="grid md:grid-cols-2 gap-8">
@@ -735,8 +728,8 @@ export default function PricingPage() {
 
       {/* ── Merch ── */}
       <Section
-        title="Мерч Термбурга"
-        subtitle="Заберите частичку Термбурга с собой"
+        title={pricingContent?.merchTitle || 'Мерч Термбурга'}
+        subtitle={pricingContent?.merchSubtitle || 'Заберите частичку Термбурга с собой'}
         className="py-10"
         warm
       >

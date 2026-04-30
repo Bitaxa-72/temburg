@@ -7,17 +7,20 @@ const API_BASE = import.meta.env.VITE_API_URL || 'https://termburg.ru/wp-json/te
 
 // Types matching WordPress API responses
 export interface WPPricingItem {
-  id: number;
+  id: number | string;
   name: string;
   duration: string;
+  period?: string;
   adultPrice: number;
   childPrice: number;
   discount: number | null;
   description?: string;
+  badge?: string;
+  badgeVariant?: 'default' | 'gold' | 'success' | string;
 }
 
 export interface WPDiscountPricingItem {
-  id: number;
+  id: number | string;
   name: string;
   duration: string;
   price: number;
@@ -26,6 +29,53 @@ export interface WPDiscountPricingItem {
 export interface WPSpecialWeekendDate {
   date: string;
   label: string;
+}
+
+export interface WPPricingContent {
+  sectionTitle?: string;
+  sectionSubtitle?: string;
+  pageTariffsTitle?: string;
+  pageTariffsSubtitle?: string;
+  weekdayLabel?: string;
+  weekendLabel?: string;
+  specialWeekendTodayLabel?: string;
+  specialWeekendTodayNote?: string;
+  fridayNote?: string;
+  childTitle?: string;
+  childNote?: string;
+  pensionerTitle?: string;
+  pensionerNote?: string;
+  includedTitle?: string;
+  includedItems?: string[];
+  subscriptionsTitle?: string;
+  subscriptionsSubtitle?: string;
+  giftBoxesTitle?: string;
+  giftBoxesSubtitle?: string;
+  merchTitle?: string;
+  merchSubtitle?: string;
+}
+
+export interface WPGiftBoxItem {
+  name: string;
+  description: string;
+}
+
+export interface WPGiftBox {
+  id: string;
+  name: string;
+  subtitle: string;
+  contents: string;
+  items: WPGiftBoxItem[];
+  price: number;
+  image: string;
+  badge?: string;
+}
+
+export interface WPMerchItem {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
 }
 
 export interface WPPricingResponse {
@@ -38,6 +88,9 @@ export interface WPPricingResponse {
   specialWeekendDates?: string[];
   specialWeekendDateDetails?: WPSpecialWeekendDate[];
   overtime?: { type: string; ratePerMin: number }[];
+  pricingContent?: WPPricingContent;
+  giftBoxes?: WPGiftBox[];
+  merchItems?: WPMerchItem[];
 }
 
 export interface WPTeamMember {
@@ -73,9 +126,16 @@ export interface WPFAQCategory {
   items: WPFAQItem[];
 }
 
+export interface WPFAQQuickCard {
+  icon: 'clock' | 'ticket' | 'users' | 'map' | string;
+  title: string;
+  text: string;
+}
+
 export interface WPFAQResponse {
   title: string;
   description: string;
+  quickCards?: WPFAQQuickCard[];
   categories: Record<string, WPFAQCategory>;
   allItems: WPFAQItem[];
 }
@@ -95,6 +155,164 @@ export interface WPSettings {
     youtube: string;
     whatsapp?: string;
   };
+}
+
+export interface WPHeader {
+  logoUrl: string;
+  brandText: string;
+  city: {
+    primary: string;
+    address: string;
+    secondary: string;
+    secondaryBadge: string;
+  };
+  nav: {
+    about: string;
+    aboutPage: string;
+    termliny: string;
+    steamRooms: string;
+    pools: string;
+    jacuzzi: string;
+    faq: string;
+    services: string;
+    pricing: string;
+    servicesPage: string;
+    swimmingSchool: string;
+    steamSchool: string;
+    cafe: string;
+    schedule: string;
+    promotions: string;
+    news: string;
+    contacts: string;
+    home: string;
+    careers: string;
+  };
+  mobileGroups: {
+    main: string;
+    services: string;
+    more: string;
+  };
+  actions: {
+    searchLabel: string;
+    searchAria: string;
+    accountLabel: string;
+    buyLabel: string;
+    openMenuAria: string;
+    closeMenuAria: string;
+  };
+  links: {
+    max: string;
+    vk: string;
+  };
+  phone: string;
+}
+
+export interface WPFooterExternalLink {
+  label: string;
+  url: string;
+}
+
+export interface WPFooterNav {
+  about: string;
+  termliny: string;
+  services: string;
+  swimmingSchool: string;
+  steamSchool: string;
+  schedule: string;
+  pricing: string;
+  promotions: string;
+  news: string;
+  cafe: string;
+  contacts: string;
+}
+
+export interface WPFooterBottomLinks {
+  partners: string;
+  careers: string;
+  offer: string;
+  privacy: string;
+  rules: string;
+}
+
+export interface WPFooter {
+  logoUrl: string;
+  brandText: string;
+  description: string;
+  contactsTitle: string;
+  phone: string;
+  email: string;
+  address: string;
+  metro: string;
+  workingHours: string;
+  linksTitle: string;
+  externalLinks: WPFooterExternalLink[];
+  navTitle: string;
+  nav: WPFooterNav;
+  mapTitle: string;
+  bottomLinks: WPFooterBottomLinks;
+  copyright: string;
+}
+
+export interface WPHeroSlide {
+  id?: number;
+  label?: string;
+  title?: string;
+  text?: string;
+  author?: string;
+  image?: string;
+}
+
+export interface WPHero {
+  titleLine1: string;
+  titleLine2: string;
+  eyebrow: string;
+  description: string;
+  primaryButtonText: string;
+  secondaryButtonText: string;
+  bottomText: string;
+  ticker: {
+    label: string;
+    text: string;
+  };
+  slides: WPHeroSlide[];
+}
+
+export interface WPTermlin {
+  id: number | string;
+  name?: string;
+  title?: string;
+  element?: string;
+  name_meaning?: string;
+  nameMeaning?: string;
+  signs?: string;
+  mission?: string;
+  baths?: string;
+  history?: string;
+  character?: string;
+  habits?: string;
+  expressions?: string[] | string;
+  omens?: string;
+  image?: string;
+  image_path?: string;
+}
+
+export interface WPTermlinyContent {
+  widgetTitle: string;
+  widgetText: string;
+  widgetButton: string;
+  widgetImage: string;
+}
+
+export interface WPAdvantageCard {
+  key: 'steam' | 'schedule' | 'services' | 'health' | 'family';
+  title: string;
+  description: string;
+}
+
+export interface WPAdvantages {
+  title: string;
+  subtitle: string;
+  cards: WPAdvantageCard[];
 }
 
 export interface WPService {
@@ -136,17 +354,57 @@ export interface WPZonesResponse {
   };
 }
 
+export interface WPZonesDataItem {
+  id: number;
+  name: string;
+  temp?: string;
+  description: string;
+  image: string;
+  features?: string[];
+}
+
+export interface WPZonesDataCategory {
+  id: number;
+  name: string;
+  subtitle: string;
+  description: string;
+  image: string;
+  items: WPZonesDataItem[];
+}
+
+export interface WPZonesDataResponse {
+  title: string;
+  subtitle: string;
+  buyButtonText: string;
+  whatToBringText: string;
+  zones: WPZonesDataCategory[];
+}
+
+export interface WPGalleryItem {
+  id: number;
+  image?: string;
+  caption?: string;
+  category?: string;
+  src?: string;
+  url?: string;
+  alt?: string;
+  title?: string;
+}
+
 export interface WPScheduleEvent {
   id: number;
-  title: string;
+  name?: string;
+  title?: string;
   description: string;
   time: string;
   duration: string;
-  weekdays: string[];
-  location: string;
-  isFree: boolean;
+  day?: string[];
+  weekdays?: string[];
+  type?: 'free' | 'paid' | 'special' | string;
+  location?: string;
+  isFree?: boolean;
   price: number | null;
-  instructor: string;
+  instructor?: string;
   highlight: boolean;
 }
 
@@ -173,11 +431,24 @@ export interface WPCafeItem {
   image: string | false;
 }
 
+export interface WPCafeCategory {
+  id?: string;
+  name: string;
+  items: WPCafeItem[];
+}
+
+export interface WPCafeMenuSlide {
+  id: string;
+  title: string;
+  image: string;
+}
+
 export interface WPCafeResponse {
-  [category: string]: {
-    name: string;
-    items: WPCafeItem[];
-  };
+  menuTitle?: string;
+  menuSubtitle?: string;
+  menuSlides?: WPCafeMenuSlide[];
+  categories?: WPCafeCategory[] | Record<string, WPCafeCategory>;
+  [key: string]: unknown;
 }
 
 // API Functions
@@ -214,6 +485,81 @@ export interface WPPageContent {
   blocks: WPPageContentBlock[];
 }
 
+export interface WPSchoolProgram {
+  id: string;
+  name: string;
+  duration: string;
+  price: number;
+  badge?: string;
+  description: string;
+  fullDescription: string;
+  image: string;
+  includes: string[];
+}
+
+export interface WPSchoolContent {
+  heroTitle?: string;
+  heroSubtitle?: string;
+  introTitle?: string;
+  introText?: string;
+  introImage?: string;
+  advantages?: string[];
+  programs?: WPSchoolProgram[];
+  ctaTitle?: string;
+  ctaText?: string;
+  ctaButton?: string;
+}
+
+export interface WPSchoolsContent {
+  swimming: WPSchoolContent;
+  steam: WPSchoolContent;
+}
+
+export interface WPContactRouteStep {
+  number: number;
+  text: string;
+  image?: string;
+}
+
+export interface WPContactRoute {
+  id: string;
+  title: string;
+  icon: 'metro' | 'car' | 'bus';
+  steps: WPContactRouteStep[];
+}
+
+export interface WPContactPartnerDirection {
+  icon: 'building' | 'megaphone' | 'camera' | 'package' | string;
+  title: string;
+  description: string;
+}
+
+export interface WPContactsContent {
+  heroTitle?: string;
+  partnersTitle?: string;
+  partnersSubtitle?: string;
+  howToGet?: WPContactRoute[];
+  partnerDirections?: WPContactPartnerDirection[];
+}
+
+export interface WPAboutVisitRule {
+  id: number;
+  title: string;
+  description: string;
+}
+
+export interface WPAboutGalleryPhoto {
+  id: number;
+  image: string;
+  alt: string;
+  caption: string;
+}
+
+export interface WPAboutContent {
+  visitRules?: WPAboutVisitRule[];
+  galleryPhotos?: WPAboutGalleryPhoto[];
+}
+
 export const api = {
   // Pricing
   getPricing: () => fetchAPI<WPPricingResponse>('/pricing'),
@@ -232,22 +578,49 @@ export const api = {
   // FAQ
   getFAQ: () => fetchAPI<WPFAQResponse>('/faq'),
 
+  // Page-specific editable content
+  getSchoolsContent: () => fetchAPI<WPSchoolsContent>('/schools-content'),
+  getContactsContent: () => fetchAPI<WPContactsContent>('/contacts-content'),
+  getAboutContent: () => fetchAPI<WPAboutContent>('/about-content'),
+
   // Settings
   getSettings: () => fetchAPI<WPSettings>('/settings'),
+
+  // Header
+  getHeader: () => fetchAPI<WPHeader>('/header'),
+
+  // Footer
+  getFooter: () => fetchAPI<WPFooter>('/footer'),
+
+  // Hero
+  getHero: () => fetchAPI<WPHero>('/hero'),
+
+  // Home advantages
+  getAdvantages: () => fetchAPI<WPAdvantages>('/advantages'),
 
   // Services
   // На сервере endpoint называется /services-list (см. termburg-admin-api-extra.php).
   // Раньше вызов шёл на /services и стабильно отдавал 404.
   getServices: () => fetchAPI<WPServicesResponse>('/services-list'),
 
+  // Termliny
+  getTermliny: () => fetchAPI<WPTermlin[]>('/termliny'),
+  getTermlinyContent: () => fetchAPI<WPTermlinyContent>('/termliny-content'),
+
   // Zones
   getZones: () => fetchAPI<WPZonesResponse>('/zones'),
+
+  // Home zones preview from ACF options page "Парные и зоны"
+  getZonesData: () => fetchAPI<WPZonesDataResponse>('/zones-data'),
+
+  // Gallery
+  getGallery: () => fetchAPI<WPGalleryItem[]>('/gallery'),
 
   // Schedule
   getSchedule: () => fetchAPI<WPScheduleEvent[]>('/schedule'),
 
   // Promotions
-  getPromotions: () => fetchAPI<WPPromotion[]>('/promotions'),
+  getPromotions: () => fetchAPI<WPPromotion[]>('/promotions-data'),
 
   // Cafe
   getCafe: () => fetchAPI<WPCafeResponse>('/cafe'),

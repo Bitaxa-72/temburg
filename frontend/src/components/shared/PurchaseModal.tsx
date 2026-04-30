@@ -83,6 +83,10 @@ function formatPhone(value: string): string {
   return `+7 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9, 11)}`;
 }
 
+function isValidCertificateAmount(amount: number): boolean {
+  return Number.isFinite(amount) && amount >= 1000 && amount <= 99999999 && amount % 500 === 0;
+}
+
 export default function PurchaseModal() {
   const { purchaseOpen, purchaseItem, closeModal } = useBooking();
   const { isAuthenticated, user, register } = useAuth();
@@ -133,7 +137,7 @@ export default function PurchaseModal() {
   const [addTicket, setAddTicket] = useState(false);
   const [ticketDate, setTicketDate] = useState('');
   const [ticketTariff, setTicketTariff] = useState('unlimited');
-  const [fridayTime, setFridayTime] = useState<'before16' | 'after16'>('before16');
+  const [fridayTime, setFridayTime] = useState<'before18' | 'after18'>('before18');
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [canScrollDown, setCanScrollDown] = useState(false);
@@ -152,7 +156,7 @@ export default function PurchaseModal() {
     if (!addTicket || !ticketDate) return 0;
     const useWeekendPricing = isSpecialWeekendDate(ticketDate, specialWeekendDates)
       || isWeekend(ticketDate)
-      || (isFriday(ticketDate) && fridayTime === 'after16');
+      || (isFriday(ticketDate) && fridayTime === 'after18');
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     const nameMap: Record<string, string> = {
       '1h': '1 час',
@@ -217,6 +221,9 @@ export default function PurchaseModal() {
       const submitPhoneDigits = phone.replace(/\D/g, '');
       if (phone && submitPhoneDigits.length > 1 && submitPhoneDigits.length < 11) {
         throw new Error('Введите корректный номер телефона');
+      }
+      if (purchaseItem?.certificate && !isValidCertificateAmount(purchaseItem.certificate.amount)) {
+        throw new Error('Сумма сертификата должна быть от 1 000 ₽ и кратна 500 ₽');
       }
 
       // Create order via WP checkout API and redirect to YooKassa
@@ -313,7 +320,7 @@ export default function PurchaseModal() {
       setAddTicket(false);
       setTicketDate('');
       setTicketTariff('unlimited');
-      setFridayTime('before16');
+      setFridayTime('before18');
       setAdults(1);
       setChildren(0);
       setGeneratedPassword('');
@@ -404,7 +411,7 @@ export default function PurchaseModal() {
               </p>
               {(purchaseItem.name.includes('Будни') || purchaseItem.name.includes('Выходные')) && (
                 <p className="mt-2 text-xs text-text-secondary/70">
-                  Пятница: до 16:00 — тариф будней, после 16:00 — тариф выходных
+                  Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных
                 </p>
               )}
             </div>
@@ -550,7 +557,7 @@ export default function PurchaseModal() {
                       />
                     </div>
 
-                    {/* Пятница: до/после 16:00 */}
+                    {/* Пятница: до/после 18:00 */}
                     {ticketDate && isFriday(ticketDate) && !isSpecialWeekendDate(ticketDate, specialWeekendDates) && (
                       <div>
                         <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-800">
@@ -560,26 +567,26 @@ export default function PurchaseModal() {
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => setFridayTime('before16')}
+                            onClick={() => setFridayTime('before18')}
                             className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
-                              fridayTime === 'before16'
+                              fridayTime === 'before18'
                                 ? 'bg-primary text-white border-primary'
                                 : 'bg-white border-amber-200 text-amber-800 hover:border-primary/30'
                             }`}
                           >
-                            До 16:00
+                          До 18:00
                             <span className="block text-[10px] opacity-70">тариф будней</span>
                           </button>
                           <button
                             type="button"
-                            onClick={() => setFridayTime('after16')}
+                            onClick={() => setFridayTime('after18')}
                             className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
-                              fridayTime === 'after16'
+                              fridayTime === 'after18'
                                 ? 'bg-primary text-white border-primary'
                                 : 'bg-white border-amber-200 text-amber-800 hover:border-primary/30'
                             }`}
                           >
-                            После 16:00
+                          После 18:00
                             <span className="block text-[10px] opacity-70">тариф выходных</span>
                           </button>
                         </div>

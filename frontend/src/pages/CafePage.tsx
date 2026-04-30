@@ -30,16 +30,18 @@ const menuSlides = [
 ];
 
 // Menu Slider Component
-function MenuSlider() {
+type MenuSlide = typeof menuSlides[number];
+
+function MenuSlider({ slides = menuSlides, title = 'Меню' }: { slides?: MenuSlide[]; title?: string }) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
   const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % menuSlides.length);
+    setCurrentSlide((prev) => (prev + 1) % slides.length);
   };
 
   const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + menuSlides.length) % menuSlides.length);
+    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -56,14 +58,14 @@ function MenuSlider() {
     setTouchStart(null);
   };
 
-  const slide = menuSlides[currentSlide];
+  const slide = slides[currentSlide] || slides[0];
 
   return (
     <section className="py-8 bg-surface">
       <Container>
         <h2 className="font-heading text-xl font-bold text-text-primary mb-4 flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
-          Меню
+          {title}
         </h2>
 
         <div
@@ -100,7 +102,7 @@ function MenuSlider() {
               <h3 className="font-semibold text-white">{slide.title}</h3>
               {/* Dots indicator */}
               <div className="flex gap-2">
-                {menuSlides.map((_, idx) => (
+                {slides.map((_, idx) => (
                   <button
                     key={idx}
                     onClick={() => setCurrentSlide(idx)}
@@ -119,15 +121,25 @@ function MenuSlider() {
 }
 
 // Cafe menu categories section with WP data
-function CafeMenuSection() {
-  const { data: wpCafe, loading } = useCafe();
-
+function CafeMenuSection({ wpCafe, loading }: { wpCafe: any; loading: boolean }) {
   // Convert WP response (Record<string, {name, items}>) to array format
-  const wpCategories = Object.keys(wpCafe).length > 0
-    ? Object.entries(wpCafe).map(([key, cat]) => ({
-        id: key,
+  const rawCategories = wpCafe && 'categories' in wpCafe ? wpCafe.categories : wpCafe;
+  const wpCategories = Array.isArray(rawCategories)
+    ? rawCategories.map((cat: any) => ({
+        id: cat.id || cat.name,
         name: cat.name,
-        items: cat.items.map((item) => ({
+        items: (cat.items || []).map((item: any) => ({
+          name: item.name,
+          price: item.price,
+          description: item.description || undefined,
+          badge: item.badge || undefined,
+        })),
+      }))
+    : Object.keys(rawCategories || {}).length > 0
+    ? Object.entries(rawCategories).filter(([, cat]) => (cat as any)?.items).map(([key, cat]) => ({
+        id: key,
+        name: (cat as any).name,
+        items: (cat as any).items.map((item: any) => ({
           name: item.name,
           price: item.price,
           description: item.description || undefined,
@@ -136,11 +148,12 @@ function CafeMenuSection() {
       }))
     : null;
 
-  const categories = wpCategories || fallbackMenu;
+  const filledWpCategories = (wpCategories || []).filter((cat: any) => cat.name && cat.items.length > 0);
+  const categories = filledWpCategories.length > 0 ? filledWpCategories : fallbackMenu;
 
   if (loading) {
     return (
-      <Section title="Меню кафетерия">
+      <Section title={wpCafe?.categoriesTitle || 'Меню кафетерия'}>
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
@@ -149,13 +162,13 @@ function CafeMenuSection() {
   }
 
   return (
-    <Section title="Меню кафетерия" subtitle="Блюда и напитки для восстановления сил">
+    <Section title={wpCafe?.categoriesTitle || 'Меню кафетерия'} subtitle={wpCafe?.categoriesSubtitle || 'Блюда и напитки для восстановления сил'}>
       <div className="space-y-8 max-w-4xl mx-auto">
-        {categories.map((cat) => (
+        {categories.map((cat: any) => (
           <div key={cat.id}>
             <h3 className="font-heading text-xl font-bold text-text-primary mb-4">{cat.name}</h3>
             <div className="space-y-2">
-              {cat.items.map((item, idx) => (
+              {cat.items.map((item: any, idx: number) => (
                 <div
                   key={idx}
                   className="flex items-center justify-between rounded-xl bg-surface border border-border/50 px-5 py-3"
@@ -185,6 +198,18 @@ export default function CafePage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «cafe» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('cafe');
+  const { data: wpCafe, loading } = useCafe();
+  const cafeSlides = menuSlides.map((fallback) => {
+    const adminSlide = Array.isArray(wpCafe?.menuSlides)
+      ? wpCafe.menuSlides.find((slide: any) => slide.id === fallback.id)
+      : null;
+
+    return {
+      ...fallback,
+      title: adminSlide?.title || fallback.title,
+      image: adminSlide?.image || fallback.image,
+    };
+  });
 
   return (
     <PageLayout title="Кафетерий" description="Кафетерий термального комплекса Термбург: здоровые блюда, травяные чаи, напитки и закуски. Меню для восстановления сил после парных и SPA.">
@@ -196,10 +221,10 @@ export default function CafePage() {
       {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
 
       {/* Menu Slider */}
-      <MenuSlider />
+      <MenuSlider slides={cafeSlides} title={(wpCafe?.menuTitle as string) || 'Меню'} />
 
       {/* Menu Categories from WP */}
-      <CafeMenuSection />
+      <CafeMenuSection wpCafe={wpCafe} loading={loading} />
     </PageLayout>
   );
 }
