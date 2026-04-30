@@ -21,6 +21,14 @@ const tariffOptions = [
   { id: 'unlimited', label: 'Безлимит', duration: 480 },
 ];
 
+const tariffNameMap: Record<string, string> = {
+  '1h': '1 час',
+  '2h': '2 часа',
+  '3h': '3 часа',
+  '4h': '4 часа',
+  unlimited: 'Безлимит на день',
+};
+
 function isWeekend(dateStr: string) {
   const d = new Date(dateStr);
   const day = d.getDay();
@@ -34,6 +42,16 @@ function isFriday(dateStr: string) {
 
 function isSpecialWeekendDate(dateStr: string, specialWeekendDates: Set<string>) {
   return dateStr !== '' && specialWeekendDates.has(dateStr);
+}
+
+function isFridayWeekendTime(timeStr: string) {
+  const [hours = '0', minutes = '0'] = timeStr.split(':');
+  return Number(hours) * 60 + Number(minutes) >= 18 * 60;
+}
+
+function getTicketTariffId(itemName: string) {
+  const lower = itemName.toLowerCase();
+  return tariffOptions.find((option) => lower.includes(option.label.toLowerCase()))?.id ?? 'unlimited';
 }
 
 function getTomorrow() {
@@ -150,6 +168,26 @@ export default function PurchaseModal() {
 
   const isCertificate = purchaseItem?.name.toLowerCase().includes('сертификат') ?? false;
   const isTicket = purchaseItem ? isTicketPurchase(purchaseItem.name) : false;
+  const mainTicketTariff = useMemo(
+    () => purchaseItem && isTicket ? getTicketTariffId(purchaseItem.name) : 'unlimited',
+    [purchaseItem, isTicket]
+  );
+  const useWeekendPricingForMainTicket = isTicket && (
+    isSpecialWeekendDate(visitDate, specialWeekendDates)
+    || isWeekend(visitDate)
+    || (isFriday(visitDate) && isFridayWeekendTime(visitTime))
+  );
+  const mainTicketSlot = useMemo(() => {
+    if (!isTicket) return null;
+    const pricing = useWeekendPricingForMainTicket ? weekendPricing : weekdayPricing;
+    return pricing.find((slot) => slot.name === tariffNameMap[mainTicketTariff]) ?? null;
+  }, [isTicket, mainTicketTariff, useWeekendPricingForMainTicket, weekendPricing, weekdayPricing]);
+  const fallbackAdultPrice = useMemo(() => {
+    const priceStr = purchaseItem?.price ?? '0';
+    const num = parseInt(priceStr.replace(/\D/g, ''), 10);
+    return isNaN(num) ? 0 : num;
+  }, [purchaseItem]);
+  const mainTicketAdultPrice = isTicket ? (mainTicketSlot?.adultPrice ?? fallbackAdultPrice) : fallbackAdultPrice;
 
   // Расчёт стоимости входного билета
   const ticketPrice = useMemo(() => {
@@ -158,41 +196,37 @@ export default function PurchaseModal() {
       || isWeekend(ticketDate)
       || (isFriday(ticketDate) && fridayTime === 'after18');
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
-    const nameMap: Record<string, string> = {
-      '1h': '1 час',
-      '2h': '2 часа',
-      '3h': '3 часа',
-      '4h': '4 часа',
-      unlimited: 'Безлимит на день',
-    };
-    const slot = pricing.find((s) => s.name === nameMap[ticketTariff]);
+    const slot = pricing.find((s) => s.name === tariffNameMap[ticketTariff]);
     return slot?.adultPrice ?? 0;
   }, [addTicket, ticketDate, ticketTariff, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing]);
 
   // Стоимость детского билета
   const childPrice = useMemo(() => {
+    if (isTicket) {
+      return mainTicketSlot?.childPrice ?? 0;
+    }
     const priceStr = purchaseItem?.childPrice ?? '0';
     const num = parseInt(priceStr.replace(/\D/g, ''), 10);
     return isNaN(num) ? 0 : num;
-  }, [purchaseItem]);
+  }, [purchaseItem, isTicket, mainTicketSlot]);
 
   // Общая стоимость услуги/билетов
   const servicePrice = useMemo(() => {
-    const priceStr = purchaseItem?.price ?? '0';
-    const num = parseInt(priceStr.replace(/\D/g, ''), 10);
-    if (isNaN(num)) return 0;
-
     // Для билетов умножаем на количество
     if (isTicket) {
-      return num * adults + childPrice * children;
+      return mainTicketAdultPrice * adults + childPrice * children;
     }
-    return num;
-  }, [purchaseItem, isTicket, adults, childPrice, children]);
+    return fallbackAdultPrice;
+  }, [isTicket, adults, mainTicketAdultPrice, childPrice, children, fallbackAdultPrice]);
 
   const totalPrice = servicePrice + ticketPrice;
   const isService = purchaseItem ? isServicePurchase(purchaseItem.name) : false;
   const hasChildPrice = !!purchaseItem?.childPrice;
   const displayPrice = ticketType === 'child' && hasChildPrice ? purchaseItem!.childPrice! : purchaseItem?.price ?? '';
+  const mainTicketPeriodLabel = useWeekendPricingForMainTicket ? 'Выходные / Праздники' : 'Будни';
+  const effectivePurchaseName = isTicket && visitDate
+    ? `${mainTicketPeriodLabel} — ${tariffNameMap[mainTicketTariff]}`
+    : purchaseItem?.name ?? '';
 
   // Get duration based on tariff
   const getDuration = () => {
@@ -234,9 +268,9 @@ export default function PurchaseModal() {
           ...(localStorage.getItem('termburg_token') ? { Authorization: `Bearer ${localStorage.getItem('termburg_token')}` } : {}),
         },
         body: JSON.stringify({
-          name: purchaseItem!.name,
+          name: effectivePurchaseName,
           amount: totalPrice,
-          quantity: adults + children || 1,
+          quantity: 1,
           email: email,
           phone: phone,
           customerName: name,
@@ -405,13 +439,18 @@ export default function PurchaseModal() {
           <form onSubmit={handleSubmit} className="p-6 space-y-5">
             {/* Выбранная услуга */}
             <div className="rounded-xl bg-background border border-border px-5 py-4">
-              <p className="font-medium text-text-primary">{purchaseItem.name}</p>
+              <p className="font-medium text-text-primary">{effectivePurchaseName}</p>
               <p className="mt-1 text-xl font-bold text-primary">
                 {isTicket ? `${servicePrice.toLocaleString('ru-RU')} ₽` : displayPrice}
               </p>
               {(purchaseItem.name.includes('Будни') || purchaseItem.name.includes('Выходные')) && (
                 <p className="mt-2 text-xs text-text-secondary/70">
                   Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных
+                </p>
+              )}
+              {isTicket && visitDate && (
+                <p className="mt-1 text-xs font-medium text-primary">
+                  Тариф по выбранной дате: {useWeekendPricingForMainTicket ? 'выходной / праздничный' : 'будний'}
                 </p>
               )}
             </div>
@@ -460,7 +499,7 @@ export default function PurchaseModal() {
                     <div>
                       <p className="text-sm font-medium text-text-primary">Взрослые</p>
                       <p className="text-xs text-text-secondary">
-                        {parseInt(purchaseItem.price?.replace(/\D/g, '') || '0', 10).toLocaleString('ru-RU')} ₽ / чел.
+                        {mainTicketAdultPrice.toLocaleString('ru-RU')} ₽ / чел.
                       </p>
                     </div>
                   </div>
