@@ -6,6 +6,7 @@ import InfoTicker from '@/components/sections/home/InfoTicker';
 import UrgentNewsBanner from '@/components/shared/UrgentNewsBanner';
 import Breadcrumbs from '@/components/shared/Breadcrumbs';
 import { getSeo } from '@/seo/seoConfig';
+import { usePageContent } from '@/hooks/useWordPressData';
 
 const SITE_URL = 'https://termburg.ru';
 
@@ -93,10 +94,12 @@ const jsonLd = {
 export default function PageLayout({ children, title, description, ogImage, schema }: PageLayoutProps) {
   const isHomePage = !!useMatch('/');
   const location = useLocation();
+  const slug = isHomePage ? 'home' : location.pathname.replace(/^\/+|\/+$/g, '');
+  const { data: editablePage } = usePageContent(slug || 'home');
   // Fallback на централизованный seoConfig если страница не передала свои meta
   const fallback = getSeo(location.pathname);
-  const effectiveTitle = title || fallback.title;
-  const effectiveDescription = description || fallback.description;
+  const effectiveTitle = editablePage.title || title || fallback.title;
+  const effectiveDescription = editablePage.metaDescription || description || fallback.description;
   // Не дублируем " | Термбург" если бренд уже в title
   const alreadyHasBrand = /Термбург/i.test(effectiveTitle);
   const fullTitle = isHomePage || alreadyHasBrand ? effectiveTitle : `${effectiveTitle} | Термбург`;

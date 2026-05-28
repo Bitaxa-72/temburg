@@ -4,6 +4,8 @@ import { useBooking } from '@/context/BookingContext';
 import { useAuth } from '@/context/AuthContext';
 import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, type PricingSlot } from '@/data/pricing';
 import { bookingsApi, paymentsApi, type ServiceType } from '@/services/api';
+import { getApiUrl } from '@/api/wordpress';
+import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions, type TariffOption } from '@/utils/pricingTariffs';
 
 // Generate random password
 function generatePassword(length = 12): string {
@@ -13,21 +15,16 @@ function generatePassword(length = 12): string {
 
 type TicketType = 'adult' | 'child';
 
-const tariffOptions = [
-  { id: '1h', label: '1 час', duration: 60 },
-  { id: '2h', label: '2 часа', duration: 120 },
-  { id: '3h', label: '3 часа', duration: 180 },
-  { id: '4h', label: '4 часа', duration: 240 },
-  { id: 'unlimited', label: 'Безлимит', duration: 480 },
-];
+function normalizePricingSlots(slots: PricingSlot[] | undefined): PricingSlot[] {
+  if (!Array.isArray(slots)) return [];
 
-const tariffNameMap: Record<string, string> = {
-  '1h': '1 час',
-  '2h': '2 часа',
-  '3h': '3 часа',
-  '4h': '4 часа',
-  unlimited: 'Безлимит на день',
-};
+  return slots.map((slot) => ({
+    ...slot,
+    id: String(slot.id),
+    adultPrice: Number(slot.adultPrice) || 0,
+    childPrice: Number(slot.childPrice) || 0,
+  }));
+}
 
 function isWeekend(dateStr: string) {
   const d = new Date(dateStr);
@@ -49,36 +46,53 @@ function isFridayWeekendTime(timeStr: string) {
   return Number(hours) * 60 + Number(minutes) >= 18 * 60;
 }
 
-function getTicketTariffId(itemName: string) {
+function getTicketTariffId(itemName: string, tariffOptions: TariffOption[]) {
   const lower = itemName.toLowerCase();
-  return tariffOptions.find((option) => lower.includes(option.label.toLowerCase()))?.id ?? 'unlimited';
+  return tariffOptions.find((option) => lower.includes(option.label.toLowerCase()))?.id
+    ?? getDefaultTariffId(tariffOptions);
 }
 
-function getTomorrow() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
+function formatDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getToday() {
+  return formatDateInputValue(new Date());
 }
 
 function getMaxDate() {
   const d = new Date();
   d.setDate(d.getDate() + 90);
-  return d.toISOString().split('T')[0];
+  return formatDateInputValue(d);
 }
 
-const SERVICE_KEYWORDS = ['парение', 'парения', 'spa', 'массаж', 'процедур', 'скраб', 'пилинг', 'обёртыван', 'пихтовый'];
+const SERVICE_KEYWORDS = ['парение', 'парения', 'spa', 'спа', 'массаж', 'процедур', 'скраб', 'пилинг', 'обёртыван', 'пихтовый', 'баня', 'сауна', 'хаммам', 'пакет', 'комплекс'];
 const TICKET_KEYWORDS = ['будни', 'выходные', 'час', 'безлимит'];
+const STANDALONE_PRODUCT_KEYWORDS = ['абонемент', 'сертификат', 'бокс', 'мерч'];
 
-function isServicePurchase(itemName: string): boolean {
+function isStandaloneProductPurchase(itemName: string): boolean {
   const lower = itemName.toLowerCase();
-  if (TICKET_KEYWORDS.some((k) => lower.includes(k))) return false;
-  if (lower.includes('абонемент') || lower.includes('сертификат') || lower.includes('бокс') || lower.includes('мерч')) return false;
+  return STANDALONE_PRODUCT_KEYWORDS.some((k) => lower.includes(k));
+}
+
+function hasServiceKeyword(itemName: string): boolean {
+  const lower = itemName.toLowerCase();
   return SERVICE_KEYWORDS.some((k) => lower.includes(k));
 }
 
-function isTicketPurchase(itemName: string): boolean {
+function isServicePurchase(itemName: string): boolean {
+  if (isStandaloneProductPurchase(itemName)) return false;
+  return hasServiceKeyword(itemName);
+}
+
+function isTicketPurchase(itemName: string, tariffOptions: TariffOption[]): boolean {
   const lower = itemName.toLowerCase();
-  return TICKET_KEYWORDS.some((k) => lower.includes(k));
+  if (isStandaloneProductPurchase(itemName) || hasServiceKeyword(itemName)) return false;
+  return TICKET_KEYWORDS.some((k) => lower.includes(k))
+    || tariffOptions.some((option) => lower.includes(option.label.toLowerCase()));
 }
 
 // Determine service type from item name
@@ -113,18 +127,30 @@ export default function PurchaseModal() {
   const [wpPricing, setWpPricing] = useState<any>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch('/wp-json/termburg/v1/pricing')
+    fetch(getApiUrl('/pricing'))
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (!cancelled && data) setWpPricing(data); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
-  const weekdayPricing: PricingSlot[] = wpPricing?.weekday || localWeekdayPricing;
-  const weekendPricing: PricingSlot[] = wpPricing?.weekend || localWeekendPricing;
+  const hasWpPricing = wpPricing !== null;
+  const weekdayPricing: PricingSlot[] = hasWpPricing ? normalizePricingSlots(wpPricing.weekday) : localWeekdayPricing;
+  const weekendPricing: PricingSlot[] = hasWpPricing ? normalizePricingSlots(wpPricing.weekend) : localWeekendPricing;
   const specialWeekendDates = useMemo(
     () => new Set<string>(Array.isArray(wpPricing?.specialWeekendDates) ? wpPricing.specialWeekendDates : []),
     [wpPricing]
   );
+  const pricingContent = wpPricing?.pricingContent ?? {};
+  const modalText = pricingContent.purchaseModal ?? {};
+  const tariffOptions = useMemo(
+    () => getTariffOptions(weekdayPricing, weekendPricing),
+    [weekdayPricing, weekendPricing]
+  );
+  const defaultTariffId = useMemo(() => getDefaultTariffId(tariffOptions), [tariffOptions]);
+  const hasVisitTariffs = tariffOptions.length > 0;
+  const childUnder6Price = wpPricing?.childUnder6 ?? 470;
+  const childNoteText = (modalText.childNote || pricingContent.childNote || 'Дети до 6 лет включительно — {price} ₽ безлимит')
+    .replace('{price}', childUnder6Price.toLocaleString('ru-RU'));
   const [step, setStep] = useState<'form' | 'processing' | 'success' | 'register' | 'error'>('form');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -154,12 +180,24 @@ export default function PurchaseModal() {
   const [ticketType, setTicketType] = useState<TicketType>('adult');
   const [addTicket, setAddTicket] = useState(false);
   const [ticketDate, setTicketDate] = useState('');
-  const [ticketTariff, setTicketTariff] = useState('unlimited');
+  const [ticketTariff, setTicketTariff] = useState(defaultTariffId);
   const [fridayTime, setFridayTime] = useState<'before18' | 'after18'>('before18');
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [canScrollDown, setCanScrollDown] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!hasVisitTariffs) {
+      setTicketTariff('');
+      setAddTicket(false);
+      return;
+    }
+
+    if (!tariffOptions.some((option) => option.id === ticketTariff)) {
+      setTicketTariff(defaultTariffId);
+    }
+  }, [defaultTariffId, hasVisitTariffs, tariffOptions, ticketTariff]);
 
   // Payment state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -167,10 +205,10 @@ export default function PurchaseModal() {
   const [bookingId, setBookingId] = useState<string | null>(null);
 
   const isCertificate = purchaseItem?.name.toLowerCase().includes('сертификат') ?? false;
-  const isTicket = purchaseItem ? isTicketPurchase(purchaseItem.name) : false;
+  const isTicket = purchaseItem ? isTicketPurchase(purchaseItem.name, tariffOptions) : false;
   const mainTicketTariff = useMemo(
-    () => purchaseItem && isTicket ? getTicketTariffId(purchaseItem.name) : 'unlimited',
-    [purchaseItem, isTicket]
+    () => purchaseItem && isTicket ? getTicketTariffId(purchaseItem.name, tariffOptions) : defaultTariffId,
+    [purchaseItem, isTicket, tariffOptions, defaultTariffId]
   );
   const useWeekendPricingForMainTicket = isTicket && (
     isSpecialWeekendDate(visitDate, specialWeekendDates)
@@ -180,8 +218,8 @@ export default function PurchaseModal() {
   const mainTicketSlot = useMemo(() => {
     if (!isTicket) return null;
     const pricing = useWeekendPricingForMainTicket ? weekendPricing : weekdayPricing;
-    return pricing.find((slot) => slot.name === tariffNameMap[mainTicketTariff]) ?? null;
-  }, [isTicket, mainTicketTariff, useWeekendPricingForMainTicket, weekendPricing, weekdayPricing]);
+    return findPricingSlot(pricing, mainTicketTariff, tariffOptions);
+  }, [isTicket, mainTicketTariff, useWeekendPricingForMainTicket, weekendPricing, weekdayPricing, tariffOptions]);
   const fallbackAdultPrice = useMemo(() => {
     const priceStr = purchaseItem?.price ?? '0';
     const num = parseInt(priceStr.replace(/\D/g, ''), 10);
@@ -196,9 +234,9 @@ export default function PurchaseModal() {
       || isWeekend(ticketDate)
       || (isFriday(ticketDate) && fridayTime === 'after18');
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
-    const slot = pricing.find((s) => s.name === tariffNameMap[ticketTariff]);
+    const slot = findPricingSlot(pricing, ticketTariff, tariffOptions);
     return slot?.adultPrice ?? 0;
-  }, [addTicket, ticketDate, ticketTariff, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing]);
+  }, [addTicket, ticketDate, ticketTariff, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
 
   // Стоимость детского билета
   const childPrice = useMemo(() => {
@@ -225,13 +263,13 @@ export default function PurchaseModal() {
   const displayPrice = ticketType === 'child' && hasChildPrice ? purchaseItem!.childPrice! : purchaseItem?.price ?? '';
   const mainTicketPeriodLabel = useWeekendPricingForMainTicket ? 'Выходные / Праздники' : 'Будни';
   const effectivePurchaseName = isTicket && visitDate
-    ? `${mainTicketPeriodLabel} — ${tariffNameMap[mainTicketTariff]}`
+    ? `${mainTicketPeriodLabel} — ${getTariffLabel(tariffOptions, mainTicketTariff)}`
     : purchaseItem?.name ?? '';
 
   // Get duration based on tariff
   const getDuration = () => {
     if (isTicket) {
-      const tariff = tariffOptions.find(t => t.id === ticketTariff);
+      const tariff = tariffOptions.find(t => t.id === mainTicketTariff);
       return tariff?.duration || 60;
     }
     return 60; // Default 60 min for services
@@ -353,7 +391,7 @@ export default function PurchaseModal() {
       setTicketType('adult');
       setAddTicket(false);
       setTicketDate('');
-      setTicketTariff('unlimited');
+      setTicketTariff(defaultTariffId);
       setFridayTime('before18');
       setAdults(1);
       setChildren(0);
@@ -368,7 +406,7 @@ export default function PurchaseModal() {
       setEmailTouched(false);
       setPhoneTouched(false);
     }, 300);
-  }, [closeModal]);
+  }, [closeModal, defaultTariffId]);
 
   // Pre-fill data for authenticated users
   useEffect(() => {
@@ -429,7 +467,7 @@ export default function PurchaseModal() {
       >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-white px-6 py-4 rounded-t-2xl">
-          <h2 id="purchase-title" className="font-heading text-xl font-bold text-text-primary">Оформить заказ</h2>
+          <h2 id="purchase-title" className="font-heading text-xl font-bold text-text-primary">{modalText.title || 'Оформить заказ'}</h2>
           <button onClick={handleClose} className="rounded-lg p-1.5 hover:bg-surface-warm transition-colors" aria-label="Закрыть">
             <X className="h-5 w-5 text-text-secondary" />
           </button>
@@ -445,7 +483,7 @@ export default function PurchaseModal() {
               </p>
               {(purchaseItem.name.includes('Будни') || purchaseItem.name.includes('Выходные')) && (
                 <p className="mt-2 text-xs text-text-secondary/70">
-                  Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных
+                  {pricingContent.fridayNote || 'Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных'}
                 </p>
               )}
               {isTicket && visitDate && (
@@ -461,14 +499,14 @@ export default function PurchaseModal() {
               <div>
                 <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-text-secondary">
                   <Calendar className="w-4 h-4" />
-                  Дата посещения
+                  {modalText.dateLabel || 'Дата посещения'}
                 </label>
                 <input
                   type="date"
                   required
                   value={visitDate}
                   onChange={(e) => setVisitDate(e.target.value)}
-                  min={getTomorrow()}
+                  min={getToday()}
                   max={getMaxDate()}
                   className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-colors"
                 />
@@ -476,7 +514,7 @@ export default function PurchaseModal() {
               <div>
                 <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-text-secondary">
                   <Clock className="w-4 h-4" />
-                  Время
+                  {modalText.timeLabel || 'Время'}
                 </label>
                 <input
                   type="time"
@@ -497,7 +535,7 @@ export default function PurchaseModal() {
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-primary" />
                     <div>
-                      <p className="text-sm font-medium text-text-primary">Взрослые</p>
+                      <p className="text-sm font-medium text-text-primary">{modalText.adultsLabel || 'Взрослые'}</p>
                       <p className="text-xs text-text-secondary">
                         {mainTicketAdultPrice.toLocaleString('ru-RU')} ₽ / чел.
                       </p>
@@ -529,7 +567,7 @@ export default function PurchaseModal() {
                     <div className="flex items-center gap-2">
                       <Baby className="w-4 h-4 text-accent" />
                       <div>
-                        <p className="text-sm font-medium text-text-primary">Дети 6–12 лет</p>
+                        <p className="text-sm font-medium text-text-primary">{modalText.childrenLabel || 'Дети 6–12 лет'}</p>
                         <p className="text-xs text-text-secondary">{childPrice.toLocaleString('ru-RU')} ₽ / чел.</p>
                       </div>
                     </div>
@@ -555,13 +593,13 @@ export default function PurchaseModal() {
                 )}
 
                 <p className="text-xs text-text-secondary/70">
-                  Дети до 6 лет включительно — 470 ₽ безлимит
+                  {childNoteText}
                 </p>
               </div>
             )}
 
             {/* Добавить входной билет */}
-            {isService && (
+            {isService && hasVisitTariffs && (
               <div className="rounded-xl bg-amber-50 border border-amber-200/60 overflow-hidden">
                 <label className="flex items-center gap-3 px-5 py-4 cursor-pointer transition-colors hover:bg-amber-100/50">
                   <input
@@ -585,13 +623,13 @@ export default function PurchaseModal() {
                     <div>
                       <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-800">
                         <Calendar className="w-3.5 h-3.5" />
-                        Дата посещения
+                        {modalText.dateLabel || 'Дата посещения'}
                       </label>
                       <input
                         type="date"
                         value={ticketDate}
                         onChange={(e) => setTicketDate(e.target.value)}
-                        min={getTomorrow()}
+                        min={getToday()}
                         className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
                       />
                     </div>
@@ -644,7 +682,7 @@ export default function PurchaseModal() {
                             key={opt.id}
                             type="button"
                             onClick={() => setTicketTariff(opt.id)}
-                            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${
+                            className={`rounded-lg px-3 py-1.5 text-xs font-medium break-words transition-all border ${
                               ticketTariff === opt.id
                                 ? 'bg-primary text-white border-primary'
                                 : 'bg-white border-amber-200 text-amber-800 hover:border-primary/30'
@@ -697,7 +735,7 @@ export default function PurchaseModal() {
                   </button>
                 </div>
                 <p className="mt-1.5 text-xs text-text-secondary/70">
-                  Дети до 6 лет включительно — 470 ₽ безлимит
+                  {childNoteText}
                 </p>
               </div>
             )}
@@ -742,25 +780,25 @@ export default function PurchaseModal() {
             {/* Контактные данные */}
             <div className="space-y-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-text-secondary">Ваше имя</label>
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.nameLabel || 'Ваше имя'}</label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ваше имя"
+                  placeholder={modalText.namePlaceholder || 'Ваше имя'}
                   className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-colors"
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-text-secondary">Телефон</label>
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.phoneLabel || 'Телефон'}</label>
                 <input
                   type="tel"
                   required
                   value={phone}
                   onChange={(e) => handlePhoneChange(e.target.value)}
                   onBlur={() => setPhoneTouched(true)}
-                  placeholder="+7 (___) ___-__-__"
+                  placeholder={modalText.phonePlaceholder || '+7 (___) ___-__-__'}
                   className={`w-full rounded-xl border bg-surface px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:ring-2 outline-none transition-colors ${
                     phoneError ? 'border-red-400 focus:border-red-400 focus:ring-red-200' : 'border-border focus:border-primary focus:ring-primary/20'
                   }`}
@@ -770,14 +808,14 @@ export default function PurchaseModal() {
                 )}
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-text-secondary">Email</label>
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.emailLabel || 'Email'}</label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   onBlur={() => setEmailTouched(true)}
-                  placeholder="your@email.com"
+                  placeholder={modalText.emailPlaceholder || 'your@email.com'}
                   className={`w-full rounded-xl border bg-surface px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:ring-2 outline-none transition-colors ${
                     emailError ? 'border-red-400 focus:border-red-400 focus:ring-red-200' : 'border-border focus:border-primary focus:ring-primary/20'
                   }`}
@@ -810,7 +848,7 @@ export default function PurchaseModal() {
             {!isAuthenticated && (
               <div className="rounded-xl bg-blue-50 border border-blue-200/60 px-4 py-3">
                 <p className="text-sm text-blue-800">
-                  После оплаты вы сможете создать личный кабинет для отслеживания заказов.
+                  {modalText.authNotice || 'После оплаты вы сможете создать личный кабинет для отслеживания заказов.'}
                 </p>
               </div>
             )}
@@ -824,12 +862,12 @@ export default function PurchaseModal() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Оформляем...
+                  {modalText.processingLabel || 'Оформляем...'}
                 </>
               ) : (
                 <>
                   <CreditCard className="h-5 w-5" />
-                  Оплатить — {(isTicket ? servicePrice : (addTicket && ticketPrice > 0 ? totalPrice : servicePrice)).toLocaleString('ru-RU')} ₽
+                  {modalText.submitPrefix || 'Оплатить —'} {(isTicket ? servicePrice : (addTicket && ticketPrice > 0 ? totalPrice : servicePrice)).toLocaleString('ru-RU')} ₽
                 </>
               )}
             </button>

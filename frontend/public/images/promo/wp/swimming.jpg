@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
@@ -37,7 +37,7 @@
     <!-- Mail.ru Counter -->
     <script type="text/javascript">
       var _tmr = window._tmr || (window._tmr = []);
-      _tmr.push({id: "3730660", type: "pageView", start: (new Date()).getTime()});
+      _tmr.push({id: "3764461", type: "pageView", start: (new Date()).getTime()});
       (function (d, w, id) {
         if (d.getElementById(id)) return;
         var ts = d.createElement("script"); ts.type = "text/javascript"; ts.async = true; ts.id = id;

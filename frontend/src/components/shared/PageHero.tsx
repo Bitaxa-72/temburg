@@ -1,5 +1,7 @@
 import Container from '@/components/ui/Container';
 import { useImage } from '@/hooks/useImage';
+import { useLocation } from 'react-router-dom';
+import { usePageContent } from '@/hooks/useWordPressData';
 
 interface PageHeroProps {
   title: string;
@@ -8,8 +10,12 @@ interface PageHeroProps {
 }
 
 export default function PageHero({ title, subtitle, backgroundImage }: PageHeroProps) {
+  const location = useLocation();
+  const slug = location.pathname === '/' ? 'home' : location.pathname.replace(/^\/+|\/+$/g, '');
+  const { data: editablePage } = usePageContent(slug || 'home');
   // Resolve image through WordPress if available
   const resolvedBg = useImage(backgroundImage || '');
+  const effectiveTitle = editablePage.title || title;
 
   return (
     <section className="relative py-16 text-center md:py-20 overflow-hidden">
@@ -33,7 +39,7 @@ export default function PageHero({ title, subtitle, backgroundImage }: PageHeroP
 
       <Container className="relative z-10">
         <h1 className="font-heading text-4xl font-bold md:text-5xl text-white">
-          {title}
+          {effectiveTitle}
         </h1>
         {subtitle && (
           <p className="mx-auto mt-4 max-w-2xl text-lg text-white/80">

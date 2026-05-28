@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation, useMatch } from 'react-router-dom';
 import { Menu, X, ChevronDown, MapPin, UserCircle, Phone, Search } from 'lucide-react';
 import { useBooking } from '@/context/BookingContext';
 import { useHeader, useSettings } from '@/hooks/useWordPressData';
-import type { WPHeader } from '@/api/wordpress';
+import type { WPHeader, WPHeaderCity } from '@/api/wordpress';
 
 interface NavItem {
   label: string;
@@ -80,11 +80,98 @@ function createMobileGroups(header: WPHeader) {
   ];
 }
 
-function createCities(header: WPHeader) {
+function createCities(header: WPHeader): WPHeaderCity[] {
+  if (header.cities?.length) {
+    return header.cities.filter((city) => city.name);
+  }
+
   return [
-    { name: header.city.primary, active: true },
-    { name: header.city.secondary, active: false, soon: true },
+    { name: header.city.primary, active: true, status: 'none', showLabel: false, isLink: false },
+    {
+      name: header.city.secondary,
+      active: false,
+      status: 'badge',
+      label: header.city.secondaryBadge,
+      showLabel: true,
+      isLink: false,
+    },
   ].filter((city) => city.name);
+}
+
+function getActiveCity(header: WPHeader, cities: WPHeaderCity[]): WPHeaderCity {
+  return cities.find((city) => city.active) || cities[0] || {
+    name: header.city.primary,
+    active: true,
+    status: 'none',
+    showLabel: false,
+    isLink: false,
+  };
+}
+
+function CityBadge({ city, fallbackLabel }: { city: WPHeaderCity; fallbackLabel?: string }) {
+  const label = city.label || fallbackLabel;
+  if (!label || city.active || city.showLabel === false || city.status === 'none') return null;
+
+  const isText = city.status === 'text';
+  return (
+    <span
+      className={
+        isText
+          ? 'text-[11px] font-medium text-white/45'
+          : 'text-[10px] bg-white/10 text-white/45 px-1.5 py-0.5 rounded-full uppercase tracking-wider'
+      }
+    >
+      {label}
+    </span>
+  );
+}
+
+function CityOption({
+  city,
+  fallbackLabel,
+  onClose,
+}: {
+  city: WPHeaderCity;
+  fallbackLabel?: string;
+  onClose?: () => void;
+}) {
+  const className = `w-full text-left px-4 py-2.5 text-sm flex items-center justify-between gap-3 transition-colors ${
+    city.active ? 'text-primary bg-white/5' : 'text-white/55 hover:text-white hover:bg-white/5'
+  }`;
+
+  const content = (
+    <>
+      <span>{city.name}</span>
+      <CityBadge city={city} fallbackLabel={fallbackLabel} />
+    </>
+  );
+
+  const isLink = city.isLink ?? city.status === 'link';
+  if (!city.active && isLink && city.url) {
+    return (
+      <a
+        href={city.url}
+        target={city.openInNewTab ? '_blank' : undefined}
+        rel={city.openInNewTab ? 'noopener noreferrer' : undefined}
+        className={className}
+        onClick={onClose}
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (city.active) onClose?.();
+      }}
+      className={`${className} ${city.active ? '' : 'cursor-default'}`}
+    >
+      {content}
+    </button>
+  );
 }
 
 function DropdownMenu({ item }: { item: NavItem }) {
@@ -146,6 +233,7 @@ function CitySelector({ header }: { header: WPHeader }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const cities = createCities(header);
+  const activeCity = getActiveCity(header, cities);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -163,29 +251,18 @@ function CitySelector({ header }: { header: WPHeader }) {
         className="inline-flex items-center gap-1.5 text-sm text-white/60 hover:text-white/80 transition-colors"
       >
         <MapPin className="w-3.5 h-3.5 text-primary" />
-        <span>{header.city.primary}</span>
+        <span>{activeCity.name}</span>
         <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="absolute top-full left-0 mt-2 w-44 rounded-xl bg-dark-surface border border-dark-border shadow-xl shadow-black/30 py-1 z-[100]">
           {cities.map((city) => (
-            <button
+            <CityOption
               key={city.name}
-              type="button"
-              onClick={() => { if (city.active) setOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${
-                city.active
-                  ? 'text-primary bg-white/5'
-                  : 'text-white/40 cursor-default'
-              }`}
-            >
-              {city.name}
-              {!city.active && (
-                <span className="text-[10px] bg-white/10 text-white/40 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                  {header.city.secondaryBadge}
-                </span>
-              )}
-            </button>
+              city={city}
+              fallbackLabel={header.city.secondaryBadge}
+              onClose={() => setOpen(false)}
+            />
           ))}
         </div>
       )}
@@ -202,6 +279,7 @@ export default function Header() {
   const navItems = createNavItems(header);
   const mobileGroups = createMobileGroups(header);
   const cities = createCities(header);
+  const activeCity = getActiveCity(header, cities);
   const logoUrl = header.logoUrl || '/favicon.ico';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -367,7 +445,7 @@ export default function Header() {
           >
             <div className="flex items-center gap-2 text-white/80">
               <MapPin className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium">{header.city.primary}</span>
+              <span className="text-sm font-medium">{activeCity.name}</span>
               <ChevronDown className={`ml-auto w-3.5 h-3.5 text-white/40 transition-transform ${mobileCityOpen ? 'rotate-180' : ''}`} />
             </div>
             <p className="mt-1 text-xs text-white/40">{header.city.address}</p>
@@ -376,19 +454,12 @@ export default function Header() {
           {mobileCityOpen && (
             <div className="mb-4 rounded-xl bg-white/5 border border-dark-border overflow-hidden">
               {cities.map((city) => (
-                <div
+                <CityOption
                   key={city.name}
-                  className={`px-4 py-2.5 text-sm flex items-center justify-between ${
-                    city.active ? 'text-primary' : 'text-white/40'
-                  }`}
-                >
-                  {city.name}
-                  {!city.active && (
-                    <span className="text-[10px] bg-white/10 text-white/40 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                      {header.city.secondaryBadge}
-                    </span>
-                  )}
-                </div>
+                  city={city}
+                  fallbackLabel={header.city.secondaryBadge}
+                  onClose={closeMobileMenu}
+                />
               ))}
             </div>
           )}

@@ -14,6 +14,7 @@ import { useCafe } from '@/hooks/useWordPressData';
 import { cafeMenu as fallbackMenu } from '@/data/cafe';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
+import { useImage } from '@/hooks/useImage';
 
 // Menu slides data
 const menuSlides = [
@@ -120,6 +121,54 @@ function MenuSlider({ slides = menuSlides, title = 'Меню' }: { slides?: Menu
   );
 }
 
+function CafeMenuItem({ item }: { item: any }) {
+  const resolvedImage = useImage(item.image || '');
+  const details = [item.cookTime ? `${item.cookTime} мин` : '', item.calories ? `${item.calories} ккал` : ''].filter(Boolean);
+
+  return (
+    <div className="rounded-xl bg-surface border border-border/50 px-5 py-4">
+      <div className="flex gap-4">
+        {item.image && (
+          <img
+            src={resolvedImage}
+            alt={item.name}
+            className="h-20 w-20 flex-shrink-0 rounded-lg object-cover"
+            loading="lazy"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-text-primary text-sm font-medium">{item.name}</span>
+                {item.badge && (
+                  <Badge variant="default" className="text-xs py-0.5">
+                    {item.badge}
+                  </Badge>
+                )}
+              </div>
+              {item.description && (
+                <p className="mt-1 text-xs leading-relaxed text-text-secondary">{item.description}</p>
+              )}
+              {details.length > 0 && (
+                <p className="mt-1 text-xs text-text-secondary/70">{details.join(' · ')}</p>
+              )}
+            </div>
+            <div className="text-right text-primary font-bold text-sm flex-shrink-0">
+              <span>{Number(item.price || 0).toLocaleString('ru-RU')}&nbsp;&#8381;</span>
+              {item.priceAlt ? (
+                <span className="block text-xs font-medium text-text-secondary">
+                  {Number(item.priceAlt).toLocaleString('ru-RU')}&nbsp;&#8381;
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Cafe menu categories section with WP data
 function CafeMenuSection({ wpCafe, loading }: { wpCafe: any; loading: boolean }) {
   // Convert WP response (Record<string, {name, items}>) to array format
@@ -131,8 +180,12 @@ function CafeMenuSection({ wpCafe, loading }: { wpCafe: any; loading: boolean })
         items: (cat.items || []).map((item: any) => ({
           name: item.name,
           price: item.price,
+          priceAlt: item.priceAlt ?? undefined,
           description: item.description || undefined,
           badge: item.badge || undefined,
+          cookTime: item.cookTime ?? undefined,
+          calories: item.calories ?? undefined,
+          image: item.image || undefined,
         })),
       }))
     : Object.keys(rawCategories || {}).length > 0
@@ -142,8 +195,12 @@ function CafeMenuSection({ wpCafe, loading }: { wpCafe: any; loading: boolean })
         items: (cat as any).items.map((item: any) => ({
           name: item.name,
           price: item.price,
+          priceAlt: item.priceAlt ?? undefined,
           description: item.description || undefined,
           badge: item.badge || undefined,
+          cookTime: item.cookTime ?? undefined,
+          calories: item.calories ?? undefined,
+          image: item.image || undefined,
         })),
       }))
     : null;
@@ -169,22 +226,7 @@ function CafeMenuSection({ wpCafe, loading }: { wpCafe: any; loading: boolean })
             <h3 className="font-heading text-xl font-bold text-text-primary mb-4">{cat.name}</h3>
             <div className="space-y-2">
               {cat.items.map((item: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between rounded-xl bg-surface border border-border/50 px-5 py-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-text-primary text-sm font-medium">{item.name}</span>
-                    {item.badge && (
-                      <Badge variant="default" className="text-xs py-0.5 flex-shrink-0">
-                        {item.badge}
-                      </Badge>
-                    )}
-                  </div>
-                  <span className="text-primary font-bold text-sm flex-shrink-0 ml-4">
-                    {item.price.toLocaleString('ru-RU')}&nbsp;&#8381;
-                  </span>
-                </div>
+                <CafeMenuItem key={idx} item={item} />
               ))}
             </div>
           </div>

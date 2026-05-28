@@ -19,8 +19,8 @@ import {
 import PageLayout from '@/components/layout/PageLayout';
 import PageHero from '@/components/shared/PageHero';
 import Section from '@/components/ui/Section';
-import { rulesCategories as localRulesCategories, totalRulesCount as localTotalRulesCount, type RuleCategory } from '@/data/rules';
-import { usePageContent } from '@/hooks/useWordPressData';
+import { rulesCategories as localRulesCategories, type RuleCategory } from '@/data/rules';
+import { usePageContent, useRules } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
 
 const categoryIcons: Record<string, typeof Users> = {
@@ -44,25 +44,29 @@ export default function RulesPage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «rules» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('rules');
-  const hasPageBlocks = (pageContent?.blocks?.length || 0) > 0;
   const pageTitle = pageContent?.title || 'Правила комплекса';
   const pageDescription = pageContent?.metaDescription || 'Правила посещения термального комплекса Термбург: полный список требований безопасности, условий посещения и поведения гостей.';
 
-  const [wpRules, setWpRules] = useState<any>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/wp-json/termburg/v1/rules')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (!cancelled && data) setWpRules(data); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-  const rulesCategories: RuleCategory[] = wpRules?.categories || (Array.isArray(wpRules) ? wpRules : null) || localRulesCategories;
+  const { data: wpRules } = useRules();
+  const rulesCategories: RuleCategory[] = (wpRules.length ? wpRules : localRulesCategories).map((category) => ({
+    ...category,
+    id: String(category.id),
+    rules: category.rules || [],
+  }));
   const totalRulesCount = useMemo(() => {
     return rulesCategories.reduce((sum, c) => sum + (c.rules?.length || 0), 0);
   }, [rulesCategories]);
 
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['general']));
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setExpandedCategories((prev) => {
+      const ids = new Set(rulesCategories.map((category) => category.id));
+      if (prev.size > 0 && Array.from(prev).some((id) => ids.has(id))) return prev;
+      if (rulesCategories.length === 0) return prev;
+      return new Set([rulesCategories[0].id]);
+    });
+  }, [rulesCategories]);
 
   const toggleCategory = (id: string) => {
     setExpandedCategories((prev) => {
@@ -93,7 +97,7 @@ export default function RulesPage() {
         subtitle={`${totalRulesCount} пунктов для комфортного и безопасного отдыха`}
         backgroundImage="/images/heroes/faq.webp"
       />
-      {hasPageBlocks ? (
+      {wpRules.length === 0 && pageContent?.blocks?.length > 0 ? (
         <WPContentBlocks blocks={pageContent.blocks} />
       ) : (
         <Section>

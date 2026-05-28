@@ -63,27 +63,37 @@ const subscriptionHighlights: Record<string, { badge?: string; badgeVariant?: 'd
 function PricingCards() {
   const { openPurchase } = useBooking();
   const [tab, setTab] = useState<'weekday' | 'weekend'>('weekday');
-  const { data: wpPricing, loading } = usePricing();
+  const { data: wpPricing, loading, error } = usePricing();
   const content = wpPricing.pricingContent;
+  const useStaticPricing = !!error;
 
-  // Use WordPress data if available, fallback to static
-  const weekdayPricing = wpPricing.weekday.length > 0
-    ? wpPricing.weekday.map(p => ({ ...p, id: String(p.id) }))
-    : fallbackWeekday;
-  const weekendPricing = wpPricing.weekend.length > 0
-    ? wpPricing.weekend.map(p => ({ ...p, id: String(p.id) }))
-    : fallbackWeekend;
-  const pensionerSlots = wpPricing.pensioner && wpPricing.pensioner.length > 0
-    ? wpPricing.pensioner.map((p) => ({ ...p, id: String(p.id) }))
-    : pensionerPricing;
-  const activeOvertimeRates = wpPricing.overtime && wpPricing.overtime.length > 0
-    ? wpPricing.overtime
-    : overtimeRates;
+  const weekdayPricing = useStaticPricing
+    ? fallbackWeekday
+    : (wpPricing.weekday || []).map(p => ({ ...p, id: String(p.id) }));
+  const weekendPricing = useStaticPricing
+    ? fallbackWeekend
+    : (wpPricing.weekend || []).map(p => ({ ...p, id: String(p.id) }));
+  const pensionerSlots = useStaticPricing
+    ? pensionerPricing
+    : (wpPricing.pensioner || []).map((p) => ({ ...p, id: String(p.id) }));
+  const activeOvertimeRates = useStaticPricing ? overtimeRates : (wpPricing.overtime || []);
   const childPrice = wpPricing.childUnder6 ?? childUnder6Price;
   const childNote = (content?.childNote || 'Дети до 6 лет включительно — {price} ₽ безлимит')
     .replace('{price}', childPrice.toLocaleString('ru-RU'));
 
   const pricing = tab === 'weekday' ? weekdayPricing : weekendPricing;
+  const hasWeekdayPricing = weekdayPricing.length > 0;
+  const hasWeekendPricing = weekendPricing.length > 0;
+  const hasVisitPricing = hasWeekdayPricing || hasWeekendPricing;
+
+  useEffect(() => {
+    if (tab === 'weekday' && !hasWeekdayPricing && hasWeekendPricing) {
+      setTab('weekend');
+    }
+    if (tab === 'weekend' && !hasWeekendPricing && hasWeekdayPricing) {
+      setTab('weekday');
+    }
+  }, [tab, hasWeekdayPricing, hasWeekendPricing]);
   const tabLabel = tab === 'weekday' ? (content?.weekdayLabel || 'Будни') : (content?.weekendLabel || 'Выходные');
 
   if (loading) {
@@ -94,6 +104,10 @@ function PricingCards() {
     );
   }
 
+  if (!hasVisitPricing) {
+    return null;
+  }
+
   return (
     <div>
       {/* Tab toggle */}
@@ -102,22 +116,24 @@ function PricingCards() {
           <button
             type="button"
             onClick={() => setTab('weekday')}
+            disabled={!hasWeekdayPricing}
             className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200 ${
               tab === 'weekday'
                 ? 'bg-white text-text-primary shadow-sm'
                 : 'text-text-secondary hover:text-text-primary'
-            }`}
+            } ${!hasWeekdayPricing ? 'opacity-40 cursor-not-allowed' : ''}`}
           >
             {content?.weekdayLabel || 'Будни'}
           </button>
           <button
             type="button"
             onClick={() => setTab('weekend')}
+            disabled={!hasWeekendPricing}
             className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200 ${
               tab === 'weekend'
                 ? 'bg-white text-text-primary shadow-sm'
                 : 'text-text-secondary hover:text-text-primary'
-            }`}
+            } ${!hasWeekendPricing ? 'opacity-40 cursor-not-allowed' : ''}`}
           >
             {content?.weekendLabel || 'Выходные / Праздники'}
           </button>
@@ -197,7 +213,7 @@ function PricingCards() {
       {/* Additional pricing info */}
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Pensioner discounts - only on weekdays */}
-        {tab === 'weekday' && (
+        {tab === 'weekday' && pensionerSlots.length > 0 && (
           <div className="rounded-xl bg-surface border border-border/50 p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center">
@@ -215,6 +231,7 @@ function PricingCards() {
         )}
 
         {/* Child tariff */}
+        {childPrice > 0 && (
         <div className="rounded-xl bg-surface border border-border/50 p-5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -226,8 +243,10 @@ function PricingCards() {
             <p>{childNote}</p>
           </div>
         </div>
+        )}
 
         {/* Overtime rates */}
+        {activeOvertimeRates.length > 0 && (
         <div className="rounded-xl bg-surface border border-border/50 p-5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
@@ -241,6 +260,7 @@ function PricingCards() {
             <p>Льготный — <strong className="text-primary">{activeOvertimeRates.find(r => r.type === 'pensioner')?.ratePerMin} ₽/мин</strong></p>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
@@ -587,12 +607,17 @@ export default function PricingPage() {
   const { data: pageContent } = usePageContent('pricing');
 
   const { openBooking, openPurchase, openWhatToBring } = useBooking();
-  const { data: wpPricing } = usePricing();
+  const { data: wpPricing, loading: pricingLoading, error: pricingError } = usePricing();
   const pricingContent = wpPricing.pricingContent;
+  const useStaticPricing = !!pricingError;
 
-  // Use WordPress subscriptions if available
-  const subscriptions = wpPricing.subscriptions.length > 0
-    ? wpPricing.subscriptions.map(s => ({
+  const subscriptions = useStaticPricing
+    ? fallbackSubscriptions.map(s => ({
+        ...s,
+        badge: '',
+        badgeVariant: undefined,
+      }))
+    : (wpPricing.subscriptions || []).map(s => ({
         id: String(s.id),
         name: s.name,
         period: s.period || s.duration,
@@ -601,19 +626,14 @@ export default function PricingPage() {
         description: s.description || '',
         badge: s.badge || '',
         badgeVariant: s.badgeVariant || undefined,
-      }))
-    : fallbackSubscriptions.map(s => ({
-        ...s,
-        badge: '',
-        badgeVariant: undefined,
       }));
   const giftBoxes: Array<WPGiftBox | typeof fallbackGiftBoxes[0]> =
-    wpPricing.giftBoxes && wpPricing.giftBoxes.length > 0 ? wpPricing.giftBoxes : fallbackGiftBoxes;
+    useStaticPricing ? fallbackGiftBoxes : (wpPricing.giftBoxes || []);
   const merchItems: Array<WPMerchItem | typeof fallbackMerchItems[0]> =
-    wpPricing.merchItems && wpPricing.merchItems.length > 0 ? wpPricing.merchItems : fallbackMerchItems;
-  const includedItems = pricingContent?.includedItems && pricingContent.includedItems.length > 0
-    ? pricingContent.includedItems
-    : includedServices;
+    useStaticPricing ? fallbackMerchItems : (wpPricing.merchItems || []);
+  const includedItems = useStaticPricing ? includedServices : (pricingContent?.includedItems || []);
+  const hasIncludedItems = includedItems.length > 0;
+  const hasVisitPricing = pricingLoading || useStaticPricing || (wpPricing.weekday || []).length > 0 || (wpPricing.weekend || []).length > 0;
 
   return (
     <PageLayout>
@@ -623,6 +643,8 @@ export default function PricingPage() {
         backgroundImage="/images/heroes/pricing.webp"
       />
       {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
+      {hasVisitPricing && (
+      <>
 
       {/* ── Tariff cards ── */}
       <Section
@@ -632,8 +654,11 @@ export default function PricingPage() {
       >
         <PricingCards />
       </Section>
+      </>
+      )}
 
       {/* ── What's included ── */}
+      {hasIncludedItems && (
       <Section title={pricingContent?.includedTitle || 'Включено в стоимость посещения'} className="py-10" warm>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {includedItems.map((service) => (
@@ -656,6 +681,7 @@ export default function PricingPage() {
           ))}
         </div>
       </Section>
+      )}
 
       {/* ── Service Links ── */}
       <Section className="py-8">
@@ -679,6 +705,8 @@ export default function PricingPage() {
           ))}
         </div>
       </Section>
+      {subscriptions.length > 0 && (
+      <>
 
       {/* ── Subscriptions (with CTA) ── */}
       <Section
@@ -705,9 +733,11 @@ export default function PricingPage() {
           })}
         </div>
       </Section>
-
-      {/* ── Gift certificates (same as main page) ── */}
+      </>
+      )}
       <PricingPreviewSection />
+      {giftBoxes.length > 0 && (
+      <>
 
       {/* ── Premium Gift boxes ── */}
       <Section
@@ -725,12 +755,14 @@ export default function PricingPage() {
           ))}
         </div>
       </Section>
+      </>
+      )}
 
       {/* ── Merch ── */}
       <Section
         title={pricingContent?.merchTitle || 'Мерч Термбурга'}
         subtitle={pricingContent?.merchSubtitle || 'Заберите частичку Термбурга с собой'}
-        className="py-10"
+        className={merchItems.length > 0 ? 'py-10' : 'hidden'}
         warm
       >
         <div className="grid gap-5 grid-cols-2 max-w-2xl mx-auto">

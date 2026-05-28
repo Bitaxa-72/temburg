@@ -183,6 +183,7 @@ export interface SiteSettings {
   workingHours: string;
   socialLinks: {
     vk: string;
+    max?: string;
     telegram: string;
     instagram: string;
     youtube: string;

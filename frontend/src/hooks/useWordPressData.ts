@@ -21,6 +21,7 @@ import type {
   WPScheduleEvent,
   WPPromotion,
   WPCafeResponse,
+  WPRuleCategory,
   WPTermlin,
   WPTermlinyContent,
   WPSchoolsContent,
@@ -139,7 +140,13 @@ export function useSettings() {
     address: 'г. Москва, ул. Гурьянова, д. 30, 2 этаж',
     metro: 'м. Печатники',
     workingHours: 'Ежедневно с 9:00 до 23:00 (кроме 1-го пн месяца — сан. день)',
-    socialLinks: { vk: 'https://vk.com/termburg', telegram: '', instagram: '', youtube: '' },
+    socialLinks: {
+      vk: 'https://vk.com/termburg',
+      max: 'https://max.ru/u/f9LHodD0cOI6sfpVks80RBneR0F0vcTuG1GR1uS9Qky2HrPEneRTITCt7Lg',
+      telegram: '',
+      instagram: '',
+      youtube: '',
+    },
   });
 }
 
@@ -153,6 +160,10 @@ export function useHeader() {
       secondary: 'Зеленогорск',
       secondaryBadge: 'Скоро',
     },
+    cities: [
+      { name: 'Москва', active: true, status: 'none', showLabel: false, isLink: false },
+      { name: 'Зеленогорск', active: false, status: 'badge', label: 'Скоро', showLabel: true, isLink: false },
+    ],
     nav: {
       about: 'О комплексе',
       aboutPage: 'О Термбурге',
@@ -188,7 +199,7 @@ export function useHeader() {
       closeMenuAria: 'Закрыть меню',
     },
     links: {
-      max: 'https://max.ru/termburg',
+      max: 'https://max.ru/u/f9LHodD0cOI6sfpVks80RBneR0F0vcTuG1GR1uS9Qky2HrPEneRTITCt7Lg',
       vk: 'https://vk.com/termburg',
     },
     phone: '+7 (909) 167-47-46',
@@ -209,7 +220,7 @@ export function useFooter() {
     linksTitle: 'Мы онлайн',
     externalLinks: [
       { label: 'ВКонтакте', url: 'https://vk.com/termburg' },
-      { label: 'Max', url: 'https://max.ru/termburg' },
+      { label: 'Max', url: 'https://max.ru/u/f9LHodD0cOI6sfpVks80RBneR0F0vcTuG1GR1uS9Qky2HrPEneRTITCt7Lg' },
       { label: 'Дзен', url: 'https://dzen.ru/id/652f7beb5939720dfbfa6bc8' },
     ],
     navTitle: 'Навигация',
@@ -379,6 +390,10 @@ export function useSchedule() {
 // Promotions hook
 export function usePromotions() {
   return useAPI<WPPromotion[]>(api.getPromotions, []);
+}
+
+export function useRules() {
+  return useAPI<WPRuleCategory[]>(api.getRules, []);
 }
 
 // Cafe hook

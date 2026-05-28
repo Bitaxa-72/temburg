@@ -4,16 +4,11 @@ import { useBooking } from '@/context/BookingContext';
 import CertificateConfigurator from '@/components/shared/CertificateConfigurator';
 import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, subscriptions as localSubscriptions, type PricingSlot, type Subscription } from '@/data/pricing';
 import { steamServices as localSteamServices, massageServices as localMassageServices, spaServices as localSpaServices, type ServiceItem } from '@/data/services';
+import { getApiUrl } from '@/api/wordpress';
+import { wpServiceItems } from '@/utils/wpServices';
+import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions } from '@/utils/pricingTariffs';
 
 type BookingType = 'steaming' | 'massage' | 'spa' | 'visit' | 'certificate' | 'subscription';
-
-const tariffOptions = [
-  { id: '1h', label: '1 час' },
-  { id: '2h', label: '2 часа' },
-  { id: '3h', label: '3 часа' },
-  { id: '4h', label: '4 часа' },
-  { id: 'unlimited', label: 'Безлимит на день' },
-];
 
 const localCertImages = [
   { id: 'pool', src: '/images/complex/pool.webp', label: 'Бассейн' },
@@ -24,6 +19,28 @@ const localCertImages = [
 
 // Will be overridden by WP data in component
 let certificateImages = localCertImages;
+
+function normalizePricingSlots(slots: PricingSlot[] | undefined): PricingSlot[] {
+  if (!Array.isArray(slots)) return [];
+
+  return slots.map((slot) => ({
+    ...slot,
+    id: String(slot.id),
+    adultPrice: Number(slot.adultPrice) || 0,
+    childPrice: Number(slot.childPrice) || 0,
+  }));
+}
+
+function normalizeSubscriptions(items: Subscription[] | undefined): Subscription[] {
+  if (!Array.isArray(items)) return [];
+
+  return items.map((item) => ({
+    ...item,
+    id: String(item.id),
+    adultPrice: Number(item.adultPrice) || 0,
+    discount: Number(item.discount) || 0,
+  }));
+}
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, '');
@@ -49,16 +66,21 @@ function isSpecialWeekendDate(dateStr: string, specialWeekendDates: Set<string>)
   return dateStr !== '' && specialWeekendDates.has(dateStr);
 }
 
-function getTomorrow() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
+function formatDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getToday() {
+  return formatDateInputValue(new Date());
 }
 
 function getMaxDate() {
   const d = new Date();
   d.setDate(d.getDate() + 90);
-  return d.toISOString().split('T')[0];
+  return formatDateInputValue(d);
 }
 
 export default function BookingModal() {
@@ -68,7 +90,7 @@ export default function BookingModal() {
   const [certImgs, setCertImgs] = useState(localCertImages);
   useEffect(() => {
     let active = true;
-    window.fetch(['/wp-json', '/termburg', '/v1', '/certificates'].join(''))
+    window.fetch(getApiUrl('/certificates'))
       .then(r => r.ok ? r.json() : null)
       .then((data: any) => {
         if (!active || !Array.isArray(data) || data.length === 0) return;
@@ -89,30 +111,49 @@ export default function BookingModal() {
   const [wpServices, setWpServices] = useState<any>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch('/wp-json/termburg/v1/pricing')
+    fetch(getApiUrl('/pricing'))
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (!cancelled && data) setWpPricing(data); })
       .catch(() => {});
-    fetch('/wp-json/termburg/v1/services')
+    fetch(getApiUrl('/services-list'))
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (!cancelled && data) setWpServices(data); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
-  const weekdayPricing: PricingSlot[] = wpPricing?.weekday || localWeekdayPricing;
-  const weekendPricing: PricingSlot[] = wpPricing?.weekend || localWeekendPricing;
+  const hasWpPricing = wpPricing !== null;
+  const weekdayPricing: PricingSlot[] = hasWpPricing ? normalizePricingSlots(wpPricing.weekday) : localWeekdayPricing;
+  const weekendPricing: PricingSlot[] = hasWpPricing ? normalizePricingSlots(wpPricing.weekend) : localWeekendPricing;
   const specialWeekendDates = useMemo(
     () => new Set<string>(Array.isArray(wpPricing?.specialWeekendDates) ? wpPricing.specialWeekendDates : []),
     [wpPricing]
   );
-  const subscriptions: Subscription[] = wpPricing?.subscriptions?.length ? wpPricing.subscriptions : localSubscriptions;
-  const steamServices: ServiceItem[] = wpServices?.steam || localSteamServices;
-  const massageServices: ServiceItem[] = wpServices?.massage || localMassageServices;
-  const spaServices: ServiceItem[] = wpServices?.spa || localSpaServices;
+  const subscriptions: Subscription[] = hasWpPricing ? normalizeSubscriptions(wpPricing.subscriptions) : localSubscriptions;
+  const modalText = wpPricing?.pricingContent?.bookingModal ?? {};
+  const steamServices: ServiceItem[] = wpServiceItems(wpServices, 'steam', localSteamServices);
+  const massageServices: ServiceItem[] = wpServiceItems(wpServices, 'massage', localMassageServices);
+  const spaServices: ServiceItem[] = wpServiceItems(wpServices, 'spa', localSpaServices);
+  const tariffOptions = useMemo(
+    () => getTariffOptions(weekdayPricing, weekendPricing),
+    [weekdayPricing, weekendPricing]
+  );
+  const defaultTariffId = useMemo(() => getDefaultTariffId(tariffOptions), [tariffOptions]);
+  const hasVisitTariffs = tariffOptions.length > 0;
+  const bookingTypeOptions = useMemo<Array<{ id: BookingType; label: string }>>(() => ([
+    { id: 'visit', label: modalText.visitLabel || 'Посещение' },
+    { id: 'steaming', label: modalText.steamingLabel || 'Парение' },
+    { id: 'massage', label: modalText.massageLabel || 'Массаж' },
+    { id: 'spa', label: modalText.spaLabel || 'Спа' },
+    { id: 'certificate', label: modalText.certificateLabel || 'Сертификат' },
+    { id: 'subscription', label: modalText.subscriptionLabel || 'Абонемент' },
+  ] as Array<{ id: BookingType; label: string }>)
+    .filter((opt) => opt.id !== 'visit' || hasVisitTariffs)
+    .filter((opt) => opt.id !== 'subscription' || subscriptions.length > 0),
+  [modalText, hasVisitTariffs, subscriptions.length]);
   const [step, setStep] = useState<'form' | 'success'>('form');
   const [bookingType, setBookingType] = useState<BookingType>('visit');
   const [date, setDate] = useState('');
-  const [tariff, setTariff] = useState('unlimited');
+  const [tariff, setTariff] = useState(defaultTariffId);
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [name, setName] = useState('');
@@ -124,14 +165,47 @@ export default function BookingModal() {
   const [certImage, setCertImage] = useState(certificateImages[0].id);
   const [certAmount, setCertAmount] = useState<number | ''>('');
   const [certWish, setCertWish] = useState('');
-  const [selectedSub, setSelectedSub] = useState(subscriptions[0].id);
+  const [selectedSub, setSelectedSub] = useState(subscriptions[0]?.id ?? '');
   const [canScrollDown, setCanScrollDown] = useState(false);
   const [showWhatToBring, setShowWhatToBring] = useState(false);
   const [fridayTime, setFridayTime] = useState<'before18' | 'after18'>('before18');
   const [addVisit, setAddVisit] = useState(false);
-  const [visitTariff, setVisitTariff] = useState('unlimited');
+  const [visitTariff, setVisitTariff] = useState(defaultTariffId);
   const [visitDate, setVisitDate] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!bookingTypeOptions.some((option) => option.id === bookingType)) {
+      setBookingType(bookingTypeOptions[0]?.id ?? 'certificate');
+    }
+  }, [bookingType, bookingTypeOptions]);
+
+  useEffect(() => {
+    if (!hasVisitTariffs) {
+      setTariff('');
+      setVisitTariff('');
+      setAddVisit(false);
+      return;
+    }
+
+    if (!tariffOptions.some((option) => option.id === tariff)) {
+      setTariff(defaultTariffId);
+    }
+    if (!tariffOptions.some((option) => option.id === visitTariff)) {
+      setVisitTariff(defaultTariffId);
+    }
+  }, [defaultTariffId, hasVisitTariffs, tariff, tariffOptions, visitTariff]);
+
+  useEffect(() => {
+    if (subscriptions.length === 0) {
+      setSelectedSub('');
+      return;
+    }
+
+    if (!subscriptions.some((sub) => sub.id === selectedSub)) {
+      setSelectedSub(subscriptions[0].id);
+    }
+  }, [selectedSub, subscriptions]);
 
   const whatToBringItems = [
     'Полотенце',
@@ -149,16 +223,27 @@ export default function BookingModal() {
       || isWeekend(visitDate)
       || (isFriday(visitDate) && fridayTime === 'after18');
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
-    const nameMap: Record<string, string> = {
-      '1h': '1 час',
-      '2h': '2 часа',
-      '3h': '3 часа',
-      '4h': '4 часа',
-      unlimited: 'Безлимит на день',
-    };
-    const slot = pricing.find((s) => s.name === nameMap[visitTariff]);
+    const slot = findPricingSlot(pricing, visitTariff, tariffOptions);
     return slot?.adultPrice ?? 0;
-  }, [addVisit, visitDate, visitTariff, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing]);
+  }, [addVisit, visitDate, visitTariff, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+
+  const selectedSteamService = useMemo(
+    () => steamServices.find((s) => s.id === selectedSteam) ?? null,
+    [steamServices, selectedSteam]
+  );
+  const selectedMassageService = useMemo(
+    () => massageServices.find((s) => s.id === selectedMassage) ?? null,
+    [massageServices, selectedMassage]
+  );
+  const selectedSpaService = useMemo(
+    () => spaServices.find((s) => s.id === selectedSpa) ?? null,
+    [spaServices, selectedSpa]
+  );
+
+  const getServiceOrderName = (service: ServiceItem | null, fallback: string) => {
+    if (!service) return fallback;
+    return service.duration ? `${service.name} (${service.duration})` : service.name;
+  };
 
   const total = useMemo(() => {
     if (bookingType === 'certificate') {
@@ -169,16 +254,13 @@ export default function BookingModal() {
       return sub?.adultPrice ?? 0;
     }
     if (bookingType === 'steaming') {
-      const steam = steamServices.find((s) => s.id === selectedSteam);
-      return (steam?.price ?? 0) + visitPrice;
+      return (selectedSteamService?.price ?? 0) + visitPrice;
     }
     if (bookingType === 'massage') {
-      const massage = massageServices.find((s) => s.id === selectedMassage);
-      return (massage?.price ?? 0) + visitPrice;
+      return (selectedMassageService?.price ?? 0) + visitPrice;
     }
     if (bookingType === 'spa') {
-      const spa = spaServices.find((s) => s.id === selectedSpa);
-      return (spa?.price ?? 0) + visitPrice;
+      return (selectedSpaService?.price ?? 0) + visitPrice;
     }
     if (!date) return 0;
     // Пятница после 18:00 = тариф выходных
@@ -186,17 +268,10 @@ export default function BookingModal() {
       || isWeekend(date)
       || (isFriday(date) && fridayTime === 'after18');
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
-    const nameMap: Record<string, string> = {
-      '1h': '1 час',
-      '2h': '2 часа',
-      '3h': '3 часа',
-      '4h': '4 часа',
-      unlimited: 'Безлимит на день',
-    };
-    const slot = pricing.find((s) => s.name === nameMap[tariff]);
+    const slot = findPricingSlot(pricing, tariff, tariffOptions);
     if (!slot) return 0;
     return slot.adultPrice * adults + slot.childPrice * children;
-  }, [bookingType, date, tariff, adults, children, selectedSub, fridayTime, selectedSteam, selectedMassage, selectedSpa, certAmount, visitPrice, specialWeekendDates, weekendPricing, weekdayPricing]);
+  }, [bookingType, date, tariff, adults, children, selectedSub, fridayTime, selectedSteamService, selectedMassageService, selectedSpaService, certAmount, visitPrice, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,7 +283,7 @@ export default function BookingModal() {
           ...(localStorage.getItem('termburg_token') ? { Authorization: `Bearer ${localStorage.getItem('termburg_token')}` } : {}),
         },
         body: JSON.stringify({
-          name: bookingType === 'visit' ? `Входной билет (${tariff === 'unlimited' ? 'Безлимит' : tariff})` : bookingType === 'steaming' ? selectedSteam : bookingType === 'massage' ? selectedMassage : bookingType === 'spa' ? selectedSpa : bookingType === 'certificate' ? `Сертификат ${certAmount} ₽` : `Абонемент`,
+          name: bookingType === 'visit' ? `Входной билет (${getTariffLabel(tariffOptions, tariff) || tariff})` : bookingType === 'steaming' ? getServiceOrderName(selectedSteamService, selectedSteam) : bookingType === 'massage' ? getServiceOrderName(selectedMassageService, selectedMassage) : bookingType === 'spa' ? getServiceOrderName(selectedSpaService, selectedSpa) : bookingType === 'certificate' ? `Сертификат ${certAmount} ₽` : `Абонемент`,
           amount: total,
           quantity: adults + children || 1,
           email: email,
@@ -234,9 +309,9 @@ export default function BookingModal() {
     closeModal();
     setTimeout(() => {
       setStep('form');
-      setBookingType('visit');
+      setBookingType(bookingTypeOptions[0]?.id ?? 'certificate');
       setDate('');
-      setTariff('unlimited');
+      setTariff(defaultTariffId);
       setAdults(1);
       setChildren(0);
       setName('');
@@ -248,14 +323,14 @@ export default function BookingModal() {
       setCertImage(certificateImages[0].id);
       setCertAmount('');
       setCertWish('');
-      setSelectedSub(subscriptions[0].id);
+      setSelectedSub(subscriptions[0]?.id ?? '');
       setShowWhatToBring(false);
       setFridayTime('before18');
       setAddVisit(false);
-      setVisitTariff('unlimited');
+      setVisitTariff(defaultTariffId);
       setVisitDate('');
     }, 300);
-  }, [closeModal]);
+  }, [bookingTypeOptions, closeModal, defaultTariffId, subscriptions]);
 
   // Check if can scroll down
   const checkScroll = useCallback(() => {
@@ -307,7 +382,7 @@ export default function BookingModal() {
       >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-white px-6 py-4 rounded-t-2xl">
-          <h2 id="booking-title" className="font-heading text-xl font-bold text-text-primary">Получу порцию счастья</h2>
+          <h2 id="booking-title" className="font-heading text-xl font-bold text-text-primary">{modalText.title || 'Получу порцию счастья'}</h2>
           <button onClick={handleClose} className="rounded-lg p-1.5 hover:bg-surface-warm transition-colors" aria-label="Закрыть">
             <X className="h-5 w-5 text-text-secondary" />
           </button>
@@ -317,16 +392,9 @@ export default function BookingModal() {
           <form onSubmit={handleSubmit} className="p-6 space-y-5">
             {/* Тип бронирования */}
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">Что хотите приобрести?</label>
+              <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.typeLabel || 'Что хотите приобрести?'}</label>
               <div className="grid grid-cols-3 gap-2">
-                {([
-                  { id: 'visit' as const, label: 'Посещение' },
-                  { id: 'steaming' as const, label: 'Парение' },
-                  { id: 'massage' as const, label: 'Массаж' },
-                  { id: 'spa' as const, label: 'Спа' },
-                  { id: 'certificate' as const, label: 'Сертификат' },
-                  { id: 'subscription' as const, label: 'Абонемент' },
-                ]).map((opt) => (
+                {bookingTypeOptions.map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
@@ -343,15 +411,15 @@ export default function BookingModal() {
               </div>
             </div>
 
-            {bookingType === 'visit' && (
+            {bookingType === 'visit' && hasVisitTariffs && (
               <>
                 {/* Дата */}
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">Дата посещения</label>
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.dateLabel || 'Дата посещения'}</label>
                   <input
                     type="date"
                     required
-                    min={getTomorrow()}
+                    min={getToday()}
                     max={getMaxDate()}
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
@@ -397,18 +465,18 @@ export default function BookingModal() {
 
                 {/* Тариф */}
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">Тариф</label>
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.tariffLabel || 'Тариф'}</label>
                   <div className="grid grid-cols-2 gap-2">
                     {tariffOptions.map((opt) => (
                       <button
                         key={opt.id}
                         type="button"
                         onClick={() => setTariff(opt.id)}
-                        className={`rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                        className={`rounded-xl px-3 py-2.5 text-sm font-medium text-center break-words transition-colors ${
                           tariff === opt.id
                             ? 'bg-primary text-white'
                             : 'bg-surface-warm text-text-secondary hover:bg-border'
-                        } ${opt.id === 'unlimited' ? 'col-span-2' : ''}`}
+                        } ${opt.duration >= 480 || opt.label.length > 18 ? 'col-span-2' : ''}`}
                       >
                         {opt.label}
                       </button>
@@ -418,10 +486,10 @@ export default function BookingModal() {
 
                 {/* Гости */}
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">Гости</label>
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.guestsLabel || 'Гости'}</label>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-                      <span className="text-sm text-text-secondary">Взрослые</span>
+                      <span className="text-sm text-text-secondary">{modalText.adultsLabel || 'Взрослые'}</span>
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
@@ -443,7 +511,7 @@ export default function BookingModal() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-                      <span className="text-sm text-text-secondary">Дети до 6 лет</span>
+                      <span className="text-sm text-text-secondary">{modalText.childrenLabel || 'Дети до 6 лет'}</span>
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
@@ -494,7 +562,7 @@ export default function BookingModal() {
                   ))}
                 </div>
                 {/* Добавить посещение */}
-                <div className="mt-3 space-y-3">
+                <div className={hasVisitTariffs ? 'mt-3 space-y-3' : 'hidden'}>
                   <label className="flex items-center gap-3 rounded-xl bg-amber-50 border border-amber-200/60 px-4 py-3 cursor-pointer transition-colors hover:bg-amber-100/50">
                     <input
                       type="checkbox"
@@ -511,11 +579,11 @@ export default function BookingModal() {
                   {addVisit && (
                     <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
                       <div>
-                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">Дата посещения</label>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.dateLabel || 'Дата посещения'}</label>
                         <input
                           type="date"
                           required
-                          min={getTomorrow()}
+                          min={getToday()}
                           value={visitDate}
                           onChange={(e) => setVisitDate(e.target.value)}
                           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
@@ -528,7 +596,7 @@ export default function BookingModal() {
                         )}
                       </div>
                       <div>
-                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">Тариф</label>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.tariffLabel || 'Тариф'}</label>
                         <div className="grid grid-cols-3 gap-1.5">
                           {tariffOptions.slice(0, 3).map((opt) => (
                             <button key={opt.id} type="button" onClick={() => setVisitTariff(opt.id)} className={`rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${visitTariff === opt.id ? 'bg-primary text-white' : 'bg-background text-text-secondary hover:bg-border'}`}>{opt.label}</button>
@@ -574,7 +642,7 @@ export default function BookingModal() {
                   ))}
                 </div>
                 {/* Добавить посещение */}
-                <div className="mt-3 space-y-3">
+                <div className={hasVisitTariffs ? 'mt-3 space-y-3' : 'hidden'}>
                   <label className="flex items-center gap-3 rounded-xl bg-amber-50 border border-amber-200/60 px-4 py-3 cursor-pointer transition-colors hover:bg-amber-100/50">
                     <input
                       type="checkbox"
@@ -591,11 +659,11 @@ export default function BookingModal() {
                   {addVisit && (
                     <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
                       <div>
-                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">Дата посещения</label>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.dateLabel || 'Дата посещения'}</label>
                         <input
                           type="date"
                           required
-                          min={getTomorrow()}
+                          min={getToday()}
                           value={visitDate}
                           onChange={(e) => setVisitDate(e.target.value)}
                           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
@@ -608,7 +676,7 @@ export default function BookingModal() {
                         )}
                       </div>
                       <div>
-                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">Тариф</label>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.tariffLabel || 'Тариф'}</label>
                         <div className="grid grid-cols-3 gap-1.5">
                           {tariffOptions.slice(0, 3).map((opt) => (
                             <button key={opt.id} type="button" onClick={() => setVisitTariff(opt.id)} className={`rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${visitTariff === opt.id ? 'bg-primary text-white' : 'bg-background text-text-secondary hover:bg-border'}`}>{opt.label}</button>
@@ -654,7 +722,7 @@ export default function BookingModal() {
                   ))}
                 </div>
                 {/* Добавить посещение */}
-                <div className="mt-3 space-y-3">
+                <div className={hasVisitTariffs ? 'mt-3 space-y-3' : 'hidden'}>
                   <label className="flex items-center gap-3 rounded-xl bg-amber-50 border border-amber-200/60 px-4 py-3 cursor-pointer transition-colors hover:bg-amber-100/50">
                     <input
                       type="checkbox"
@@ -671,11 +739,11 @@ export default function BookingModal() {
                   {addVisit && (
                     <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
                       <div>
-                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">Дата посещения</label>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.dateLabel || 'Дата посещения'}</label>
                         <input
                           type="date"
                           required
-                          min={getTomorrow()}
+                          min={getToday()}
                           value={visitDate}
                           onChange={(e) => setVisitDate(e.target.value)}
                           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
@@ -688,7 +756,7 @@ export default function BookingModal() {
                         )}
                       </div>
                       <div>
-                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">Тариф</label>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.tariffLabel || 'Тариф'}</label>
                         <div className="grid grid-cols-3 gap-1.5">
                           {tariffOptions.slice(0, 3).map((opt) => (
                             <button key={opt.id} type="button" onClick={() => setVisitTariff(opt.id)} className={`rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${visitTariff === opt.id ? 'bg-primary text-white' : 'bg-background text-text-secondary hover:bg-border'}`}>{opt.label}</button>
@@ -736,7 +804,7 @@ export default function BookingModal() {
               />
             )}
 
-            {bookingType === 'subscription' && (
+            {bookingType === 'subscription' && subscriptions.length > 0 && (
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-text-secondary">Выберите абонемент</label>
                 <div className="space-y-2">
@@ -766,35 +834,35 @@ export default function BookingModal() {
             {bookingType !== 'certificate' && (
             <div className="space-y-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-text-secondary">Имя</label>
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.nameLabel || 'Имя'}</label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ваше имя"
+                  placeholder={modalText.namePlaceholder || 'Ваше имя'}
                   className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-colors"
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-text-secondary">Телефон</label>
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.phoneLabel || 'Телефон'}</label>
                 <input
                   type="tel"
                   required
                   value={phone}
                   onChange={(e) => setPhone(formatPhone(e.target.value))}
-                  placeholder="+7 (___) ___-__-__"
+                  placeholder={modalText.phonePlaceholder || '+7 (___) ___-__-__'}
                   className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-colors"
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-text-secondary">Email (для чека)</label>
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">{modalText.emailLabel || 'Email (для чека)'}</label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your@email.ru"
+                  placeholder={modalText.emailPlaceholder || 'your@email.ru'}
                   className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-colors"
                 />
               </div>
@@ -814,7 +882,7 @@ export default function BookingModal() {
                   <p className="mt-1 text-xs text-text-secondary">
                     {adults} взр.{children > 0 ? ` + ${children} дет.` : ''} &middot;{' '}
                     {isSpecialWeekendDate(date, specialWeekendDates) || isWeekend(date) || (isFriday(date) && fridayTime === 'after18') ? 'выходной' : 'будни'} &middot;{' '}
-                    {tariffOptions.find((t) => t.id === tariff)?.label}
+                    {getTariffLabel(tariffOptions, tariff)}
                   </p>
                 )}
               </div>
@@ -826,7 +894,7 @@ export default function BookingModal() {
               type="submit"
               className="w-full rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-primary-light active:brightness-90"
             >
-              Оплатить мою порцию счастья
+              {modalText.submitLabel || 'Оплатить мою порцию счастья'}
             </button>
             )}
             <button
@@ -834,7 +902,7 @@ export default function BookingModal() {
               onClick={() => setShowWhatToBring(true)}
               className="block w-full mt-3 text-center text-xs text-text-secondary/70 hover:text-primary transition-colors"
             >
-              Не забудьте взять с собой →
+              {modalText.whatToBringLabel || 'Не забудьте взять с собой →'}
             </button>
           </form>
         ) : (
@@ -851,7 +919,7 @@ export default function BookingModal() {
               onClick={() => setShowWhatToBring(true)}
               className="block w-full mb-6 text-center text-sm text-primary hover:underline transition-colors"
             >
-              Не забудьте взять с собой →
+              {modalText.whatToBringLabel || 'Не забудьте взять с собой →'}
             </button>
             <div>
               <button

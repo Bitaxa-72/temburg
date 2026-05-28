@@ -14,13 +14,15 @@ RewriteBase /
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule \.php$ - [L]
 
-# Hidden login URL — замените HIDDEN_LOGIN_SLUG на реальный slug перед деплоем (см. HANDOVER.md § Доступы)
-# Значение должно совпадать с настройкой плагина WPS Hide Login и не публиковаться в открытых источниках.
-RewriteRule ^HIDDEN_LOGIN_SLUG/?$ /wp-index.php [L]
+# Hidden login URL — значение должно совпадать с настройкой WPS Hide Login
+RewriteRule ^tb-secret-login/?$ /wp-index.php [L]
+
+# YooKassa webhook callback — POST на /?yookassa=callback должен попасть в WP, а не в SPA fallback.
+RewriteCond %{QUERY_STRING} (^|&)yookassa=callback(&|$)
+RewriteRule ^.*$ /wp-index.php [L]
 
 # WordPress API - route through wp-index.php
 RewriteRule ^wp-json(.*)$ /wp-index.php [L]
-
 RewriteRule ^termburg(.*)$ /wp-index.php [L]
 
 # WordPress admin directory - serve files directly
@@ -63,8 +65,8 @@ RewriteRule ^product-category/(.*)$ https://termburg.ru/pricing [R=301,L]
 RewriteRule ^product/individualnye-pareniya/?$ https://termburg.ru/services [R=301,L]
 RewriteRule ^product/klassicheskij-massazh/?$ https://termburg.ru/services [R=301,L]
 RewriteRule ^product/(.*)$ https://termburg.ru/pricing [R=301,L]
+
 # Safe news redirect: только для несуществующих /news/article-name
-# (когда есть директория /news/index.html — пропускаем, иначе будет infinite loop)
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^news/(.+)$ https://termburg.ru/news [R=301,L]
@@ -77,12 +79,14 @@ RewriteRule ^job/?$ https://termburg.ru/careers [R=301,L]
 RewriteRule ^vacancy/(.*)$ https://termburg.ru/careers [R=301,L]
 RewriteRule ^reviews/?$ https://termburg.ru/ [R=301,L]
 
+# Vite assets: если файла нет, отдаём 404, а не SPA index.html
+RewriteRule ^assets/.+\.(js|css|map|json|woff2?|png|jpe?g|webp|svg|ico)$ - [L]
+
 # Static files serve directly
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule . - [L]
 
 # Prerender priority: если для URL есть статический /<route>/index.html — отдаём его
-# (краулеры видят уникальные мета-теги до того как загрузится JS)
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI}/index.html -f
 RewriteRule ^(.+?)/?$ /$1/index.html [L]
@@ -93,17 +97,22 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.html [L]
 </IfModule>
 
-# HTML страницы не кешируем (чтобы prerender обновлялся при деплое)
 <IfModule mod_headers.c>
+  # HTML не кешируем, чтобы всегда подтягивался свежий build/index.html или /route/index.html
   <FilesMatch "\.html$">
-    Header set Cache-Control "no-cache, no-store, must-revalidate"
-    Header set Pragma "no-cache"
-    Header set Expires "0"
+    Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header always set Pragma "no-cache"
+    Header always set Expires "0"
   </FilesMatch>
 
-  Header set X-Content-Type-Options "nosniff"
-  Header set X-Frame-Options "SAMEORIGIN"
-  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  # Хэшированные Vite assets можно кешировать надолго
+  <FilesMatch "\.(js|css|woff2?|png|jpe?g|webp|svg|ico)$">
+    Header always set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
 
 <IfModule mod_deflate.c>
@@ -115,10 +124,28 @@ RewriteRule . /index.html [L]
   ExpiresByType text/html "access plus 0 seconds"
   ExpiresByType text/css "access plus 1 year"
   ExpiresByType application/javascript "access plus 1 year"
-  ExpiresByType image/jpeg "access plus 1 month"
-  ExpiresByType image/png "access plus 1 month"
-  ExpiresByType image/webp "access plus 1 month"
-  ExpiresByType image/svg+xml "access plus 1 month"
+  ExpiresByType text/javascript "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType image/x-icon "access plus 1 year"
   ExpiresByType font/woff "access plus 1 year"
   ExpiresByType font/woff2 "access plus 1 year"
 </IfModule>
+
+# BEGIN WordPress
+# Директивы (строки) между `BEGIN WordPress` и `END WordPress`
+# созданы автоматически и подлежат изменению только через фильтры WordPress.
+# Сделанные вручную изменения между этими маркерами будут перезаписаны.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+
+# END WordPress

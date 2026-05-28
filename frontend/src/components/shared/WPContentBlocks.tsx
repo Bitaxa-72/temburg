@@ -114,7 +114,9 @@ export default function WPContentBlocks({ blocks, className = '' }: WPContentBlo
               <Section key={idx} className="py-6">
                 <Container>
                   <div className="mx-auto max-w-3xl rounded-2xl border border-warm-gold/30 bg-warm-gold/10 p-6 text-text-primary">
-                    {block.body}
+                    {block.body && (
+                      <div dangerouslySetInnerHTML={{ __html: block.body }} />
+                    )}
                   </div>
                 </Container>
               </Section>

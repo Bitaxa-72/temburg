@@ -3,7 +3,11 @@
  * Fetches data from WordPress REST API
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://termburg.ru/wp-json/termburg/v1';
+export const API_BASE = import.meta.env.VITE_API_URL || 'https://termburg.ru/wp-json/termburg/v1';
+
+export function getApiUrl(endpoint: string): string {
+  return `${API_BASE}${endpoint}`;
+}
 
 // Types matching WordPress API responses
 export interface WPPricingItem {
@@ -31,6 +35,48 @@ export interface WPSpecialWeekendDate {
   label: string;
 }
 
+export interface WPBookingModalContent {
+  title?: string;
+  typeLabel?: string;
+  visitLabel?: string;
+  steamingLabel?: string;
+  massageLabel?: string;
+  spaLabel?: string;
+  certificateLabel?: string;
+  subscriptionLabel?: string;
+  dateLabel?: string;
+  tariffLabel?: string;
+  guestsLabel?: string;
+  adultsLabel?: string;
+  childrenLabel?: string;
+  nameLabel?: string;
+  namePlaceholder?: string;
+  phoneLabel?: string;
+  phonePlaceholder?: string;
+  emailLabel?: string;
+  emailPlaceholder?: string;
+  submitLabel?: string;
+  whatToBringLabel?: string;
+}
+
+export interface WPPurchaseModalContent {
+  title?: string;
+  dateLabel?: string;
+  timeLabel?: string;
+  adultsLabel?: string;
+  childrenLabel?: string;
+  childNote?: string;
+  nameLabel?: string;
+  namePlaceholder?: string;
+  phoneLabel?: string;
+  phonePlaceholder?: string;
+  emailLabel?: string;
+  emailPlaceholder?: string;
+  authNotice?: string;
+  submitPrefix?: string;
+  processingLabel?: string;
+}
+
 export interface WPPricingContent {
   sectionTitle?: string;
   sectionSubtitle?: string;
@@ -53,6 +99,8 @@ export interface WPPricingContent {
   giftBoxesSubtitle?: string;
   merchTitle?: string;
   merchSubtitle?: string;
+  bookingModal?: WPBookingModalContent;
+  purchaseModal?: WPPurchaseModalContent;
 }
 
 export interface WPGiftBoxItem {
@@ -150,11 +198,23 @@ export interface WPSettings {
   workingHours: string;
   socialLinks: {
     vk: string;
+    max?: string;
     telegram: string;
     instagram: string;
     youtube: string;
     whatsapp?: string;
   };
+}
+
+export interface WPHeaderCity {
+  name: string;
+  url?: string;
+  label?: string;
+  status?: 'none' | 'badge' | 'text' | 'link' | string;
+  showLabel?: boolean;
+  isLink?: boolean;
+  active?: boolean;
+  openInNewTab?: boolean;
 }
 
 export interface WPHeader {
@@ -166,6 +226,7 @@ export interface WPHeader {
     secondary: string;
     secondaryBadge: string;
   };
+  cities?: WPHeaderCity[];
   nav: {
     about: string;
     aboutPage: string;
@@ -447,13 +508,21 @@ export interface WPCafeResponse {
   menuTitle?: string;
   menuSubtitle?: string;
   menuSlides?: WPCafeMenuSlide[];
+  categoriesTitle?: string;
+  categoriesSubtitle?: string;
   categories?: WPCafeCategory[] | Record<string, WPCafeCategory>;
   [key: string]: unknown;
 }
 
+export interface WPRuleCategory {
+  id: number | string;
+  title: string;
+  rules: string[];
+}
+
 // API Functions
 async function fetchAPI<T>(endpoint: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`);
+  const response = await fetch(getApiUrl(endpoint));
   if (!response.ok) {
     throw new Error(`API error: ${response.status}`);
   }
@@ -478,11 +547,53 @@ export interface WPPageContentBlock {
   items?: string[];
 }
 
+export interface WPCareersStat {
+  value: string;
+  label: string;
+}
+
+export interface WPCareersBenefit {
+  icon?: 'graduation' | 'briefcase' | 'users' | 'party' | string;
+  title: string;
+  text: string;
+}
+
+export interface WPCareerVacancy {
+  title: string;
+  schedule?: string;
+  salary?: string;
+  employment?: string;
+  tasksTitle?: string;
+  tasks?: string[];
+  perks?: string[];
+  buttonLabel?: string;
+}
+
+export interface WPCareersContent {
+  pageTitle?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  stats?: WPCareersStat[];
+  benefits?: WPCareersBenefit[];
+  vacanciesTitle?: string;
+  vacanciesSubtitle?: string;
+  vacancies?: WPCareerVacancy[];
+  applyTitle?: string;
+  formTitle?: string;
+  formText?: string;
+  successTitle?: string;
+  successText?: string;
+  directTitle?: string;
+  directText?: string;
+  directEmail?: string;
+}
+
 export interface WPPageContent {
   slug: string;
   title?: string;
   metaDescription?: string;
   blocks: WPPageContentBlock[];
+  careers?: WPCareersContent;
 }
 
 export interface WPSchoolProgram {
@@ -621,6 +732,9 @@ export const api = {
 
   // Promotions
   getPromotions: () => fetchAPI<WPPromotion[]>('/promotions-data'),
+
+  // Rules
+  getRules: () => fetchAPI<WPRuleCategory[]>('/rules'),
 
   // Cafe
   getCafe: () => fetchAPI<WPCafeResponse>('/cafe'),

@@ -5,12 +5,13 @@ import Section from '@/components/ui/Section';
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import { promotions as localPromotions } from '@/data/promotions';
+import { getApiUrl } from '@/api/wordpress';
 
 export default function PromotionsCarousel() {
   const [wpPromotions, setWpPromotions] = useState<any[] | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch('/wp-json/termburg/v1/promotions-data')
+    fetch(getApiUrl('/promotions-data'))
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (!cancelled && Array.isArray(data) && data.length > 0) setWpPromotions(data); })
       .catch(() => {});

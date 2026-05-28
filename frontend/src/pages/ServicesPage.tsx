@@ -9,18 +9,19 @@ import TicketButton from '@/components/ui/TicketButton';
 import Container from '@/components/ui/Container';
 import Card from '@/components/ui/Card';
 import { useBooking } from '@/context/BookingContext';
-import { useServices, useSettings } from '@/hooks/useWordPressData';
+import { usePricing, useServices, useSettings } from '@/hooks/useWordPressData';
 import {
   includedServices as fallbackIncluded,
+  massageServices as fallbackMassage,
   spaServices as fallbackSpa,
   steamServices as fallbackSteam,
   type ServiceItem,
 } from '@/data/services';
 import { getSpaImageMap, getSteamImageMap } from '@/data/imagePaths';
-import type { WPService } from '@/api/wordpress';
 import { useImage } from '@/hooks/useImage';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
+import { wpServiceImages, wpServiceItems } from '@/utils/wpServices';
 
 // Get image maps from centralized location
 const spaImages = getSpaImageMap();
@@ -170,20 +171,6 @@ function ServiceModal({
   );
 }
 
-// Helper to convert WPService to ServiceItem
-function wpToServiceItem(wp: WPService): ServiceItem {
-  return {
-    id: wp.slug || String(wp.id),
-    name: wp.name,
-    duration: wp.duration || '',
-    price: wp.price || 0,
-    priceNote: wp.priceNote || undefined,
-    description: wp.description,
-    fullDescription: wp.fullDescription || undefined,
-    includes: wp.includes?.length ? wp.includes : undefined,
-  };
-}
-
 export default function ServicesPage() {
   // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
   // Если в админке для slug «services» добавлены блоки — они показываются после PageHero.
@@ -200,38 +187,22 @@ export default function ServicesPage() {
 
   // Fetch services from WordPress
   const { data: wpServices, loading } = useServices();
+  const { data: wpPricing } = usePricing();
 
   // Convert WordPress services to local format with fallbacks
-  const { spaServices, steamServices, includedServices, wpImages } = useMemo(() => {
-    const wpImages: Record<string, string> = {};
+  const { spaServices, steamServices, massageServices, includedServices, wpImages } = useMemo(() => {
+    const included = wpPricing.pricingContent?.includedItems?.length
+      ? wpPricing.pricingContent.includedItems
+      : fallbackIncluded;
 
-    // Extract spa services
-    let spa: ServiceItem[] = [];
-    if (wpServices?.spa?.items?.length) {
-      spa = wpServices.spa.items.map((s) => {
-        if (s.image) wpImages[s.slug || String(s.id)] = s.image as string;
-        return wpToServiceItem(s);
-      });
-    } else {
-      spa = fallbackSpa;
-    }
-
-    // Extract steam services
-    let steam: ServiceItem[] = [];
-    if (wpServices?.steam?.items?.length) {
-      steam = wpServices.steam.items.map((s) => {
-        if (s.image) wpImages[s.slug || String(s.id)] = s.image as string;
-        return wpToServiceItem(s);
-      });
-    } else {
-      steam = fallbackSteam;
-    }
-
-    // Use fallback for included services (these come from settings, not posts)
-    const included = fallbackIncluded;
-
-    return { spaServices: spa, steamServices: steam, includedServices: included, wpImages };
-  }, [wpServices]);
+    return {
+      spaServices: wpServiceItems(wpServices, 'spa', fallbackSpa),
+      steamServices: wpServiceItems(wpServices, 'steam', fallbackSteam),
+      massageServices: wpServiceItems(wpServices, 'massage', fallbackMassage),
+      includedServices: included,
+      wpImages: wpServiceImages(wpServices),
+    };
+  }, [wpPricing.pricingContent, wpServices]);
 
   const allImages: Record<string, string> = { ...spaImages, ...steamImages, ...wpImages };
 
@@ -368,6 +339,22 @@ export default function ServicesPage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {spaServices.map((service) => (
+            <ServiceCard
+              key={service.id}
+              service={service}
+              image={allImages[service.id]}
+              onClick={() => openModal(service)}
+            />
+          ))}
+        </div>
+      </Section>
+
+      <Section
+        title={wpServices?.massage?.name || 'Массаж'}
+        subtitle="Профессиональные массажные программы из ACF"
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {massageServices.map((service) => (
             <ServiceCard
               key={service.id}
               service={service}

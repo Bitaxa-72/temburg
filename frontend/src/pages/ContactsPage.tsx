@@ -71,6 +71,11 @@ export default function ContactsPage() {
 
   // Social links from WordPress settings
   const socialLinks = [
+    (settings.socialLinks?.max || fallbackContact.social.max) && {
+      name: 'Max',
+      href: settings.socialLinks?.max || fallbackContact.social.max,
+      icon: <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm3 13h-2v-4l-1.5 2.5L10 11v4H8V9h2l2 3 2-3h2v6z"/></svg>,
+    },
     settings.socialLinks?.vk && {
       name: 'VK',
       href: settings.socialLinks.vk,

@@ -41,7 +41,7 @@ export const contactInfo: ContactInfo = {
   workingHours: 'Ежедневно с 9:00 до 23:00 (кроме 1-го пн месяца — сан. день)',
   social: {
     vk: 'https://vk.com/termburg',
-    max: 'https://max.ru/termburg',
+    max: 'https://max.ru/u/f9LHodD0cOI6sfpVks80RBneR0F0vcTuG1GR1uS9Qky2HrPEneRTITCt7Lg',
     instagram: 'https://instagram.com/termburg',
   },
   coordinates: {

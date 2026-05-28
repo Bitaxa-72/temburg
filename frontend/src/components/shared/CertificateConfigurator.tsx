@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, memo } from 'react';
 import { toPng } from 'html-to-image';
 import JsBarcode from 'jsbarcode';
 import { Gift, Sparkles, Heart, Star, Check, Plus } from 'lucide-react';
+import { getApiUrl } from '@/api/wordpress';
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, '');
@@ -183,7 +184,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
   const [, setWpCertsLoaded] = useState(false);
   useEffect(() => {
     let active = true;
-    window.fetch(['/wp-json', '/termburg', '/v1', '/certificates'].join(''))
+    window.fetch(getApiUrl('/certificates'))
       .then(r => r.ok ? r.json() : null)
       .then((data: any) => {
         if (!active || !Array.isArray(data) || data.length === 0) return;
@@ -213,8 +214,6 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
   const [selectedColor, setSelectedColor] = useState(certificateColors[0].id);
   const wishRef = useRef<HTMLTextAreaElement>(null);
   const colorCarouselRef = useRef<HTMLDivElement>(null);
-  const frontPreviewRef = useRef<HTMLDivElement>(null);
-  const backPreviewRef = useRef<HTMLDivElement>(null);
   const barcodeRef = useRef<SVGSVGElement>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   // Уникальный код сертификата — генерируется один раз при монтировании компонента,
@@ -227,24 +226,60 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
   const selectedHolidayData = certificateHolidays.find(h => h.id === selectedHoliday) || certificateHolidays[0];
   const selectedColorData = certificateColors.find(c => c.id === selectedColor) || certificateColors[0];
   const isCertAmountValid = isValidCertificateAmount(certAmount);
+  const previewFrameRef = useRef<HTMLDivElement>(null);
+  const frontCaptureRef = useRef<HTMLDivElement>(null);
+  const backCaptureRef = useRef<HTMLDivElement>(null);
+  const captureBarcodeRef = useRef<SVGSVGElement>(null);
+  const [previewScale, setPreviewScale] = useState(1);
 
   // Рендерим реальный Code128 штрихкод в SVG ref'е
   useEffect(() => {
-    if (!barcodeRef.current) return;
-    try {
-      JsBarcode(barcodeRef.current, ticketId, {
-        format: 'CODE128',
-        displayValue: false,
-        margin: 0,
-        width: 2,
-        height: 36,
-        background: 'transparent',
-        lineColor: '#000000',
-      });
-    } catch (err) {
-      console.warn('Barcode render failed:', err);
-    }
+    [barcodeRef.current, captureBarcodeRef.current].forEach((node) => {
+      if (!node) return;
+      try {
+        JsBarcode(node, ticketId, {
+          format: 'CODE128',
+          displayValue: false,
+          margin: 0,
+          width: 2,
+          height: 36,
+          background: 'transparent',
+          lineColor: '#000000',
+        });
+      } catch (err) {
+        console.warn('Barcode render failed:', err);
+      }
+    });
   }, [ticketId]);
+
+  useEffect(() => {
+    if (!showPreview) {
+      setPreviewScale(1);
+      return;
+    }
+
+    const frame = previewFrameRef.current;
+    if (!frame) return;
+
+    const updatePreviewScale = () => {
+      const frameWidth = frame.clientWidth || CERT_CAPTURE_WIDTH;
+      setPreviewScale(Math.min(1, frameWidth / CERT_CAPTURE_WIDTH));
+    };
+
+    updatePreviewScale();
+
+    const observer = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(updatePreviewScale)
+      : null;
+
+    observer?.observe(frame);
+    window.addEventListener('resize', updatePreviewScale);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updatePreviewScale);
+    };
+  }, [showPreview]);
 
   const isLightBg = selectedColorData.light;
   const certText = {
@@ -294,17 +329,23 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
     }, 0);
   };
 
-  const captureCertificateSide = (node: HTMLDivElement) => toPng(node, {
-    pixelRatio: 2,
-    cacheBust: true,
-    width: CERT_CAPTURE_WIDTH,
-    height: CERT_CAPTURE_HEIGHT,
-    style: {
-      width: `${CERT_CAPTURE_WIDTH}px`,
-      height: `${CERT_CAPTURE_HEIGHT}px`,
-      maxWidth: 'none',
-    },
-  });
+  const captureCertificateSide = async (node: HTMLDivElement) => {
+    await document.fonts?.ready;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    return toPng(node, {
+      pixelRatio: 2,
+      cacheBust: true,
+      width: CERT_CAPTURE_WIDTH,
+      height: CERT_CAPTURE_HEIGHT,
+      style: {
+        width: `${CERT_CAPTURE_WIDTH}px`,
+        height: `${CERT_CAPTURE_HEIGHT}px`,
+        maxWidth: 'none',
+        transform: 'none',
+      },
+    });
+  };
 
   const handleSubmit = async () => {
     if (!isCertAmountValid) {
@@ -317,11 +358,11 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
     let backImage: string | undefined;
     try {
       setIsCapturing(true);
-      if (frontPreviewRef.current) {
-        frontImage = await captureCertificateSide(frontPreviewRef.current);
+      if (frontCaptureRef.current) {
+        frontImage = await captureCertificateSide(frontCaptureRef.current);
       }
-      if (backPreviewRef.current) {
-        backImage = await captureCertificateSide(backPreviewRef.current);
+      if (backCaptureRef.current) {
+        backImage = await captureCertificateSide(backCaptureRef.current);
       }
     } catch (err) {
       console.warn('Failed to capture cert preview:', err);
@@ -351,6 +392,114 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
       : showDescription
         ? 'lg:grid-cols-[280px_1fr]'
         : '';
+
+  const renderCertificateFront = (
+    ref?: React.RefObject<HTMLDivElement | null>,
+    fixedSize = false,
+  ) => (
+    <div
+      ref={ref}
+      className={`relative rounded-2xl overflow-hidden shadow-2xl ring-1 ${fixedSize ? 'w-[520px] h-[325px]' : ''} ${isLightBg ? 'ring-stone-300' : 'ring-white/10'} bg-gradient-to-br ${selectedColorData.bgClass}`}
+      style={fixedSize ? undefined : { aspectRatio: '16/10' }}
+    >
+      <div className="absolute inset-0 flex">
+        <div className={`w-[48%] flex flex-col p-6 ${certText.primary} z-10 overflow-hidden justify-between`}>
+          <div>
+            <p className={`text-[10px] uppercase tracking-[0.2em] ${certText.secondary} mb-1`}>Подарочный сертификат</p>
+            <h4 className={`font-heading text-2xl font-bold ${certText.heading} tracking-wide`}>ТЕРМБУРГ</h4>
+            <p className={`text-[10px] ${certText.accent} uppercase tracking-wider mt-1`}>Термальный комплекс</p>
+            <div className="w-14 h-0.5 bg-gradient-to-r from-primary to-transparent mt-3 mb-3" />
+            <p className={`text-base font-bold ${certText.primary}`}>{getHolidayLabel()}</p>
+            <p className={`font-bold text-primary whitespace-nowrap mt-1 ${certAmount >= 1000000 ? 'text-2xl' : certAmount >= 100000 ? 'text-3xl' : 'text-4xl'}`}>
+              {certAmount.toLocaleString('ru-RU')}&nbsp;₽
+            </p>
+          </div>
+          <div className={`text-[10px] ${certText.muted} space-y-0.5`}>
+            <p>ул. Гурьянова, д. 30</p>
+            <p>+7 (909) 167-47-46</p>
+            <p className="text-primary font-semibold">termburg.ru</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCertificateBack = (
+    ref: React.RefObject<HTMLDivElement | null> | undefined,
+    barcodeSvgRef: React.RefObject<SVGSVGElement | null>,
+    fixedSize = false,
+  ) => (
+    <div
+      ref={ref}
+      className={`relative rounded-2xl overflow-hidden shadow-xl ring-1 ${fixedSize ? 'w-[520px] h-[325px]' : ''} ${isLightBg ? 'ring-stone-300' : 'ring-white/10'} bg-gradient-to-br ${selectedColorData.bgClass}`}
+      style={fixedSize ? undefined : { aspectRatio: '16/10' }}
+    >
+      <div className="absolute inset-0 p-6 flex flex-col justify-between">
+        <div className="flex justify-between items-start">
+          <div>
+            <h4 className={`font-heading text-2xl font-bold ${certText.primary}`}>ТЕРМБУРГ</h4>
+            <p className={`text-xs ${certText.muted} mt-0.5`}>Термальный комплекс</p>
+            <div className="mt-3 space-y-0.5">
+              <p className={`text-[10px] ${certText.muted} uppercase tracking-wider`}>Получатель</p>
+              <p className={`text-lg font-semibold ${certText.primary}`}>{recipientName || '—'}</p>
+              {recipientPhone && (
+                <p className={`text-sm ${certText.medium}`}>{recipientPhone}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col items-end">
+            <div className="h-10 bg-white rounded-md p-1.5 flex items-center">
+              <svg ref={barcodeSvgRef} style={{ height: '100%', width: 'auto' }} />
+            </div>
+            <p className={`text-[9px] ${certText.code} mt-1 font-mono`}>{ticketId}</p>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          {certWish ? (
+            <p className={`text-sm italic ${certText.italic} leading-relaxed text-center max-w-[90%] break-words`} style={{ display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {certWish}
+            </p>
+          ) : (
+            <p className={`text-sm ${certText.muted} italic`}>Место для пожелания</p>
+          )}
+        </div>
+        <div className={`flex justify-center gap-6 text-[10px] ${certText.soft}`}>
+          <span className="flex items-center gap-1">
+            <Check className="w-3 h-3 text-primary" />
+            6 месяцев
+          </span>
+          <span className="flex items-center gap-1">
+            <Check className="w-3 h-3 text-primary" />
+            Частями
+          </span>
+          <span className="flex items-center gap-1">
+            <Check className="w-3 h-3 text-primary" />
+            Любые услуги
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderScaledPreview = (children: React.ReactNode, attachScaleRef = false) => (
+    <div
+      ref={attachScaleRef ? previewFrameRef : undefined}
+      className="relative w-full max-w-[520px] overflow-hidden"
+      style={{ height: `${CERT_CAPTURE_HEIGHT * previewScale}px` }}
+    >
+      <div
+        className="absolute left-0 top-0"
+        style={{
+          width: CERT_CAPTURE_WIDTH,
+          height: CERT_CAPTURE_HEIGHT,
+          transform: `scale(${previewScale})`,
+          transformOrigin: 'top left',
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
 
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 rounded-2xl">
@@ -608,82 +757,24 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
             </button>
           </div>
 
-          <div
-            className={showPreview ? 'flex flex-col items-center lg:items-start' : 'fixed'}
-            style={showPreview ? undefined : { left: -20000, top: 0, width: 520, pointerEvents: 'none', opacity: 1 }}
-            aria-hidden={!showPreview}
-          >
-              {showPreview && <p className="text-sm text-text-secondary mb-3">Предпросмотр сертификата</p>}
-              <div className="w-full max-w-[520px] space-y-4">
-                <div ref={frontPreviewRef} className={`relative rounded-2xl overflow-hidden shadow-2xl ring-1 ${isLightBg ? 'ring-stone-300' : 'ring-white/10'} bg-gradient-to-br ${selectedColorData.bgClass}`} style={{ aspectRatio: '16/10' }}>
-                  <div className="absolute inset-0 flex">
-                    <div className={`w-[48%] flex flex-col p-6 ${certText.primary} z-10 overflow-hidden justify-between`}>
-                      <div>
-                        <p className={`text-[10px] uppercase tracking-[0.2em] ${certText.secondary} mb-1`}>Подарочный сертификат</p>
-                        <h4 className={`font-heading text-2xl font-bold ${certText.heading} tracking-wide`}>ТЕРМБУРГ</h4>
-                        <p className={`text-[10px] ${certText.accent} uppercase tracking-wider mt-1`}>Термальный комплекс</p>
-                        <div className="w-14 h-0.5 bg-gradient-to-r from-primary to-transparent mt-3 mb-3" />
-                        <p className={`text-base font-bold ${certText.primary}`}>{getHolidayLabel()}</p>
-                        <p className={`font-bold text-primary whitespace-nowrap mt-1 ${certAmount >= 1000000 ? 'text-2xl' : certAmount >= 100000 ? 'text-3xl' : 'text-4xl'}`}>
-                          {certAmount.toLocaleString('ru-RU')}&nbsp;₽
-                        </p>
-                      </div>
-                      <div className={`text-[10px] ${certText.muted} space-y-0.5`}>
-                        <p>ул. Гурьянова, д. 30</p>
-                        <p>+7 (909) 167-47-46</p>
-                        <p className="text-primary font-semibold">termburg.ru</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div ref={backPreviewRef} className={`relative rounded-2xl overflow-hidden shadow-xl ring-1 ${isLightBg ? 'ring-stone-300' : 'ring-white/10'} bg-gradient-to-br ${selectedColorData.bgClass}`} style={{ aspectRatio: '16/10' }}>
-                  <div className="absolute inset-0 p-6 flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className={`font-heading text-2xl font-bold ${certText.primary}`}>ТЕРМБУРГ</h4>
-                        <p className={`text-xs ${certText.muted} mt-0.5`}>Термальный комплекс</p>
-                        <div className="mt-3 space-y-0.5">
-                          <p className={`text-[10px] ${certText.muted} uppercase tracking-wider`}>Получатель</p>
-                          <p className={`text-lg font-semibold ${certText.primary}`}>{recipientName || '—'}</p>
-                          {recipientPhone && (
-                            <p className={`text-sm ${certText.medium}`}>{recipientPhone}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end">
-                        <div className="h-10 bg-white rounded-md p-1.5 flex items-center">
-                          <svg ref={barcodeRef} style={{ height: '100%', width: 'auto' }} />
-                        </div>
-                        <p className={`text-[9px] ${certText.code} mt-1 font-mono`}>{ticketId}</p>
-                      </div>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center">
-                      {certWish ? (
-                        <p className={`text-sm italic ${certText.italic} leading-relaxed text-center max-w-[90%] break-words`} style={{ display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {certWish}
-                        </p>
-                      ) : (
-                        <p className={`text-sm ${certText.muted} italic`}>Место для пожелания</p>
-                      )}
-                    </div>
-                    <div className={`flex justify-center gap-6 text-[10px] ${certText.soft}`}>
-                      <span className="flex items-center gap-1">
-                        <Check className="w-3 h-3 text-primary" />
-                        6 месяцев
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Check className="w-3 h-3 text-primary" />
-                        Частями
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Check className="w-3 h-3 text-primary" />
-                        Любые услуги
-                      </span>
-                    </div>
-                  </div>
-                </div>
+          {showPreview && (
+            <div className="flex min-w-0 flex-col items-center lg:items-start">
+              <p className="text-sm text-text-secondary mb-3">Предпросмотр сертификата</p>
+              <div className="w-full max-w-[520px] min-w-0 space-y-4">
+                {renderScaledPreview(renderCertificateFront(undefined, true), true)}
+                {renderScaledPreview(renderCertificateBack(undefined, barcodeRef, true))}
               </div>
+            </div>
+          )}
+        </div>
+
+        <div
+          className="fixed left-[-20000px] top-0 w-[520px] pointer-events-none opacity-100"
+          aria-hidden="true"
+        >
+          <div className="w-[520px] space-y-4">
+            {renderCertificateFront(frontCaptureRef, true)}
+            {renderCertificateBack(backCaptureRef, captureBarcodeRef, true)}
           </div>
         </div>
       </div>

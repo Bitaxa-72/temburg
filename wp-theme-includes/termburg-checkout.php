@@ -33,7 +33,7 @@ function termburg_create_order($request) {
 
     $product_name = sanitize_text_field(isset($params["name"]) ? $params["name"] : "");
     $amount = floatval(isset($params["amount"]) ? $params["amount"] : 0);
-    $quantity = intval(isset($params["quantity"]) ? $params["quantity"] : 1);
+    $quantity = max(1, intval(isset($params["quantity"]) ? $params["quantity"] : 1));
     $email = sanitize_email(isset($params["email"]) ? $params["email"] : "");
     $phone = sanitize_text_field(isset($params["phone"]) ? $params["phone"] : "");
     $name = sanitize_text_field(isset($params["customerName"]) ? $params["customerName"] : "");
@@ -65,7 +65,7 @@ function termburg_create_order($request) {
     // Create order
     $order = wc_create_order();
 
-    // Add line item with correct price
+    // The frontend sends amount as the final line total, not a unit price.
     $item = new WC_Order_Item_Product();
     $product = wc_get_product($product_id);
     if ($product) {
@@ -73,8 +73,8 @@ function termburg_create_order($request) {
     }
     $item->set_name($product_name);
     $item->set_quantity($quantity);
-    $item->set_subtotal($amount * $quantity);
-    $item->set_total($amount * $quantity);
+    $item->set_subtotal($amount);
+    $item->set_total($amount);
     $order->add_item($item);
 
     // Set billing info
