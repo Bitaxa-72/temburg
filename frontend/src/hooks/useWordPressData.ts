@@ -27,6 +27,7 @@ import type {
   WPSchoolsContent,
   WPContactsContent,
   WPAboutContent,
+  WPFamilyContent,
 } from '../api/wordpress';
 import { termliny as fallbackTermliny, type Termlin } from '../data/termliny';
 
@@ -128,6 +129,10 @@ export function useAboutContent() {
     visitRules: [],
     galleryPhotos: [],
   });
+}
+
+export function useFamilyContent() {
+  return useAPI<WPFamilyContent>(api.getFamilyContent, {});
 }
 
 // Settings hook

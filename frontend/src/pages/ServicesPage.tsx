@@ -351,7 +351,7 @@ export default function ServicesPage() {
 
       <Section
         title={wpServices?.massage?.name || 'Массаж'}
-        subtitle="Профессиональные массажные программы из ACF"
+        subtitle="Профессиональные массажные программы для расслабления и восстановления"
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {massageServices.map((service) => (

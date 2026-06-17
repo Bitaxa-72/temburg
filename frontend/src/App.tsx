@@ -44,6 +44,7 @@ const PoolsPage = lazy(() => import('@/pages/PoolsPage'));
 const SteamRoomsPage = lazy(() => import('@/pages/SteamRoomsPage'));
 const PlungePoolsPage = lazy(() => import('@/pages/PlungePoolsPage'));
 const JacuzziPage = lazy(() => import('@/pages/JacuzziPage'));
+const YooKassaReturnPage = lazy(() => import('@/pages/YooKassaReturnPage'));
 
 function LoadingFallback() {
   return (
@@ -155,6 +156,7 @@ export default function App() {
           <Route path="/steam-rooms" element={<SteamRoomsPage />} />
           <Route path="/jacuzzi" element={<JacuzziPage />} />
           <Route path="/plunge-pools" element={<PlungePoolsPage />} />
+          <Route path="/yookassa/returnUrl" element={<YooKassaReturnPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>

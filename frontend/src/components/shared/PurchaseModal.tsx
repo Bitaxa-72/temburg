@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { X, CheckCircle, Phone, Users, Baby, Ticket, ChevronDown, Calendar, Clock, Minus, Plus, UserPlus, Loader2, Eye, EyeOff, Copy, Check, AlertCircle, CreditCard } from 'lucide-react';
-import { useBooking } from '@/context/BookingContext';
+import { useBooking, type CheckoutLineItem } from '@/context/BookingContext';
 import { useAuth } from '@/context/AuthContext';
 import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, type PricingSlot } from '@/data/pricing';
 import { bookingsApi, paymentsApi, type ServiceType } from '@/services/api';
 import { getApiUrl } from '@/api/wordpress';
-import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions, type TariffOption } from '@/utils/pricingTariffs';
+import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions, tariffUsesFridayWeekendAllDay, type TariffOption } from '@/utils/pricingTariffs';
+import { cleanPaymentReturnUrl, clearPendingCheckout, getPaymentReturnParams, getPendingCheckout, markPendingCheckoutConfirmed, savePendingCheckout } from '@/utils/paymentReturn';
+import { buildServiceBookingFallbackSlots, formatServiceBookingRange, getServiceBookingMinDate, getServiceReservedHours, normalizeServiceBookingSection, normalizeServiceBookingSlots, type ServiceBookingSlot } from '@/utils/serviceBooking';
 
 // Generate random password
 function generatePassword(length = 12): string {
@@ -23,6 +25,7 @@ function normalizePricingSlots(slots: PricingSlot[] | undefined): PricingSlot[] 
     id: String(slot.id),
     adultPrice: Number(slot.adultPrice) || 0,
     childPrice: Number(slot.childPrice) || 0,
+    fridayWeekendAllDay: Boolean(slot.fridayWeekendAllDay),
   }));
 }
 
@@ -119,9 +122,37 @@ function isValidCertificateAmount(amount: number): boolean {
   return Number.isFinite(amount) && amount >= 1000 && amount <= 99999999 && amount % 500 === 0;
 }
 
+function normalizeCheckoutLineItems(items: CheckoutLineItem[] | undefined): CheckoutLineItem[] {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item) => ({
+      ...item,
+      name: String(item.name || '').trim(),
+      price: Number(item.price) || 0,
+      quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
+      duration: String(item.duration || '').trim(),
+      serviceDate: item.serviceDate ? String(item.serviceDate) : undefined,
+      serviceStartHour: item.serviceStartHour !== undefined ? Number(item.serviceStartHour) : undefined,
+      reservedHours: item.reservedHours !== undefined ? Number(item.reservedHours) : undefined,
+      serviceSection: item.serviceSection ? normalizeServiceBookingSection(item.serviceSection) : undefined,
+    }))
+    .filter((item) => item.name && item.price > 0);
+}
+
+function ticketLineName(label: string, type: 'adult' | 'child') {
+  const suffix = type === 'adult' ? 'взрослый' : 'детский';
+  return `${label || 'Входной билет'} ${suffix}`;
+}
+
 export default function PurchaseModal() {
   const { purchaseOpen, purchaseItem, closeModal } = useBooking();
   const { isAuthenticated, user, register } = useAuth();
+  const paymentPreview = import.meta.env.DEV
+    ? new URLSearchParams(window.location.search).get('payment-preview')
+    : null;
+  const isPaymentPreview = paymentPreview === 'success' || paymentPreview === 'registered';
+  const paymentReturn = useMemo(() => getPaymentReturnParams(), []);
 
   // WP pricing data with local fallback
   const [wpPricing, setWpPricing] = useState<any>(null);
@@ -182,6 +213,10 @@ export default function PurchaseModal() {
   const [ticketDate, setTicketDate] = useState('');
   const [ticketTariff, setTicketTariff] = useState(defaultTariffId);
   const [fridayTime, setFridayTime] = useState<'before18' | 'after18'>('before18');
+  const [serviceHour, setServiceHour] = useState('');
+  const [serviceSlots, setServiceSlots] = useState<ServiceBookingSlot[]>([]);
+  const [serviceSlotsLoading, setServiceSlotsLoading] = useState(false);
+  const [serviceSlotsError, setServiceSlotsError] = useState('');
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
   const [canScrollDown, setCanScrollDown] = useState(false);
@@ -202,18 +237,26 @@ export default function PurchaseModal() {
   // Payment state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [errorTitle, setErrorTitle] = useState('Ошибка');
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [orderKey, setOrderKey] = useState<string | null>(null);
 
   const isCertificate = purchaseItem?.name.toLowerCase().includes('сертификат') ?? false;
   const isTicket = purchaseItem ? isTicketPurchase(purchaseItem.name, tariffOptions) : false;
   const mainTicketTariff = useMemo(
-    () => purchaseItem && isTicket ? getTicketTariffId(purchaseItem.name, tariffOptions) : defaultTariffId,
+    () => purchaseItem && isTicket ? (purchaseItem.tariffId ?? getTicketTariffId(purchaseItem.name, tariffOptions)) : defaultTariffId,
     [purchaseItem, isTicket, tariffOptions, defaultTariffId]
   );
+  const mainTicketLabel = purchaseItem?.tariffLabel || getTariffLabel(tariffOptions, mainTicketTariff);
+  const mainTicketUsesFridayWeekendAllDay = tariffUsesFridayWeekendAllDay(tariffOptions, mainTicketTariff, weekdayPricing, weekendPricing);
   const useWeekendPricingForMainTicket = isTicket && (
-    isSpecialWeekendDate(visitDate, specialWeekendDates)
-    || isWeekend(visitDate)
-    || (isFriday(visitDate) && isFridayWeekendTime(visitTime))
+    visitDate
+      ? (
+          isSpecialWeekendDate(visitDate, specialWeekendDates)
+          || isWeekend(visitDate)
+          || (isFriday(visitDate) && (mainTicketUsesFridayWeekendAllDay || isFridayWeekendTime(visitTime)))
+        )
+      : purchaseItem?.tariffPeriod === 'weekend'
   );
   const mainTicketSlot = useMemo(() => {
     if (!isTicket) return null;
@@ -226,17 +269,18 @@ export default function PurchaseModal() {
     return isNaN(num) ? 0 : num;
   }, [purchaseItem]);
   const mainTicketAdultPrice = isTicket ? (mainTicketSlot?.adultPrice ?? fallbackAdultPrice) : fallbackAdultPrice;
+  const ticketUsesFridayWeekendAllDay = tariffUsesFridayWeekendAllDay(tariffOptions, ticketTariff, weekdayPricing, weekendPricing);
 
   // Расчёт стоимости входного билета
   const ticketPrice = useMemo(() => {
     if (!addTicket || !ticketDate) return 0;
     const useWeekendPricing = isSpecialWeekendDate(ticketDate, specialWeekendDates)
       || isWeekend(ticketDate)
-      || (isFriday(ticketDate) && fridayTime === 'after18');
+      || (isFriday(ticketDate) && (ticketUsesFridayWeekendAllDay || fridayTime === 'after18'));
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     const slot = findPricingSlot(pricing, ticketTariff, tariffOptions);
     return slot?.adultPrice ?? 0;
-  }, [addTicket, ticketDate, ticketTariff, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+  }, [addTicket, ticketDate, ticketTariff, ticketUsesFridayWeekendAllDay, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
 
   // Стоимость детского билета
   const childPrice = useMemo(() => {
@@ -259,12 +303,235 @@ export default function PurchaseModal() {
 
   const totalPrice = servicePrice + ticketPrice;
   const isService = purchaseItem ? isServicePurchase(purchaseItem.name) : false;
+  const requiresVisitTicket = Boolean(purchaseItem?.requiresVisitTicket || isService);
+  const requiresServiceBooking = requiresVisitTicket && isService;
+  const serviceBookingSection = useMemo(() => {
+    const serviceLine = purchaseItem?.lineItems?.find((line) => line.kind === 'service');
+    return normalizeServiceBookingSection(serviceLine?.serviceSection, serviceLine?.name, purchaseItem?.name);
+  }, [purchaseItem]);
+  const serviceVisitMinDate = requiresServiceBooking ? getServiceBookingMinDate() : getToday();
+  const serviceBookingDate = ticketDate;
+  const serviceReservedHours = getServiceReservedHours(purchaseItem?.duration);
+  const selectedServiceSlot = useMemo(
+    () => serviceSlots.find((slot) => String(slot.hour) === serviceHour) ?? null,
+    [serviceSlots, serviceHour]
+  );
+  const serviceBookingBlocked = requiresServiceBooking
+    && (!serviceBookingDate || !serviceHour || serviceSlotsLoading || Boolean(serviceSlotsError) || !selectedServiceSlot?.available);
   const hasChildPrice = !!purchaseItem?.childPrice;
   const displayPrice = ticketType === 'child' && hasChildPrice ? purchaseItem!.childPrice! : purchaseItem?.price ?? '';
   const mainTicketPeriodLabel = useWeekendPricingForMainTicket ? 'Выходные / Праздники' : 'Будни';
   const effectivePurchaseName = isTicket && visitDate
-    ? `${mainTicketPeriodLabel} — ${getTariffLabel(tariffOptions, mainTicketTariff)}`
+    ? `${mainTicketPeriodLabel} — ${mainTicketLabel}`
     : purchaseItem?.name ?? '';
+  const requiredVisitTicketLabel = getTariffLabel(tariffOptions, ticketTariff) || ticketTariff || 'Входной билет';
+  const checkoutLineItems = useMemo<CheckoutLineItem[]>(() => {
+    if (!purchaseItem) return [];
+
+    const lines = normalizeCheckoutLineItems(purchaseItem.lineItems);
+    if (lines.length === 0) {
+      if (isTicket) {
+        if (adults > 0 && mainTicketAdultPrice > 0) {
+          lines.push({
+            name: ticketLineName(mainTicketLabel || 'Входной билет', 'adult'),
+            price: mainTicketAdultPrice,
+            quantity: adults,
+            kind: 'adult_ticket',
+          });
+        }
+        if (children > 0 && childPrice > 0) {
+          lines.push({
+            name: ticketLineName(mainTicketLabel || 'Входной билет', 'child'),
+            price: childPrice,
+            quantity: children,
+            kind: 'child_ticket',
+          });
+        }
+      } else if (purchaseItem.certificate) {
+        lines.push({
+          name: `Подарочный сертификат ${purchaseItem.certificate.amount.toLocaleString('ru-RU')} ₽`,
+          price: purchaseItem.certificate.amount,
+          quantity: 1,
+          kind: 'certificate',
+        });
+      } else if (fallbackAdultPrice > 0) {
+        lines.push({
+          name: effectivePurchaseName || purchaseItem.name,
+          price: fallbackAdultPrice,
+          quantity: 1,
+          duration: purchaseItem.duration,
+          kind: isService ? 'service' : 'product',
+        });
+      }
+    }
+
+    if (requiresServiceBooking && serviceHour) {
+      const serviceLine = lines.find((line) => line.kind === 'service')
+        ?? (!isTicket && !purchaseItem.certificate ? lines[0] : undefined);
+
+      if (serviceLine) {
+        serviceLine.serviceDate = serviceBookingDate;
+        serviceLine.serviceStartHour = Number(serviceHour);
+        serviceLine.reservedHours = serviceReservedHours;
+        serviceLine.serviceSection = serviceBookingSection;
+      }
+    }
+
+    if (requiresVisitTicket && ticketPrice > 0) {
+      lines.push({
+        name: ticketLineName(requiredVisitTicketLabel, 'adult'),
+        price: ticketPrice,
+        quantity: 1,
+        kind: 'visit_ticket',
+      });
+    }
+
+    return lines;
+  }, [purchaseItem, isTicket, adults, children, mainTicketAdultPrice, childPrice, mainTicketLabel, fallbackAdultPrice, effectivePurchaseName, isService, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, requiresVisitTicket, ticketPrice, requiredVisitTicketLabel]);
+
+  const renderServiceBookingTimePicker = () => {
+    if (!requiresServiceBooking || !serviceBookingDate) return null;
+
+    return (
+      <div>
+        <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-800">
+          <Clock className="w-3.5 h-3.5" />
+          Время услуги
+        </label>
+        <p className="mb-2 text-xs text-amber-700/80">
+          Бронь займет {serviceReservedHours} ч. по длительности услуги.
+        </p>
+
+        {serviceSlotsLoading && (
+          <p className="text-xs text-amber-700/80">Загружаем свободные часы...</p>
+        )}
+
+        {serviceSlotsError && (
+          <p className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+            {serviceSlotsError}
+          </p>
+        )}
+
+        {serviceSlots.length > 0 && (
+          <div className="grid grid-cols-3 gap-1.5">
+            {serviceSlots.map((slot) => {
+              const selected = String(slot.hour) === serviceHour;
+              return (
+                <button
+                  key={slot.hour}
+                  type="button"
+                  disabled={!slot.available || serviceSlotsLoading}
+                  onClick={() => setServiceHour(String(slot.hour))}
+                  className={`min-h-12 rounded-lg border px-2 py-1.5 text-xs font-medium transition-all ${
+                    selected
+                      ? 'bg-primary text-white border-primary'
+                      : slot.available
+                        ? 'bg-white border-amber-200 text-amber-800 hover:border-primary/30'
+                        : 'bg-white/70 border-amber-100 text-amber-700/40 cursor-not-allowed'
+                  }`}
+                >
+                  <span className="block">{slot.label}</span>
+                  <span className="block text-[10px] opacity-80">
+                    {slot.available ? formatServiceBookingRange(slot.hour, serviceReservedHours) : (slot.past ? 'Прошло' : 'Занято')}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    if (!purchaseOpen || !requiresVisitTicket || !hasVisitTariffs) return;
+    setAddTicket(true);
+    if (visitDate && !ticketDate) {
+      setTicketDate(visitDate);
+    }
+  }, [hasVisitTariffs, purchaseOpen, requiresVisitTicket, ticketDate, visitDate]);
+
+  useEffect(() => {
+    if (!requiresServiceBooking) return;
+    if (ticketDate && ticketDate < serviceVisitMinDate) {
+      setTicketDate('');
+      setServiceHour('');
+    }
+    if (visitDate && visitDate < serviceVisitMinDate) {
+      setVisitDate('');
+    }
+  }, [requiresServiceBooking, serviceVisitMinDate, ticketDate, visitDate]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!requiresServiceBooking || !serviceBookingDate) {
+      setServiceSlots([]);
+      setServiceHour('');
+      setServiceSlotsError('');
+      setServiceSlotsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setServiceSlotsLoading(true);
+    setServiceSlotsError('');
+
+    const params = new URLSearchParams({
+      date: serviceBookingDate,
+      hours: String(serviceReservedHours),
+      section: serviceBookingSection,
+    });
+
+    fetch(getApiUrl(`/checkout/service-slots?${params.toString()}`))
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || 'Не удалось загрузить часы услуги');
+        }
+        return normalizeServiceBookingSlots(result.slots);
+      })
+      .then((slots) => {
+        if (cancelled) return;
+        const firstAvailable = slots.find((slot) => slot.available) ?? null;
+        setServiceSlots(slots);
+        setServiceHour((current) => (
+          slots.some((slot) => String(slot.hour) === current && slot.available)
+            ? current
+            : (firstAvailable ? String(firstAvailable.hour) : '')
+        ));
+        setServiceSlotsError(firstAvailable ? '' : 'На эту дату нет свободного времени для выбранной услуги');
+      })
+      .catch((slotError) => {
+        if (cancelled) return;
+        if (import.meta.env.DEV) {
+          const slots = buildServiceBookingFallbackSlots(serviceReservedHours, serviceBookingDate);
+          const firstAvailable = slots.find((slot) => slot.available) ?? null;
+          setServiceSlots(slots);
+          setServiceHour((current) => (
+            slots.some((slot) => String(slot.hour) === current && slot.available)
+              ? current
+              : (firstAvailable ? String(firstAvailable.hour) : '')
+          ));
+          setServiceSlotsError(firstAvailable ? '' : 'На эту дату нет свободного времени для выбранной услуги');
+          console.warn('Service slots API is unavailable; using dev-only fallback slots.', slotError);
+          return;
+        }
+        setServiceSlots([]);
+        setServiceHour('');
+        setServiceSlotsError(slotError instanceof Error ? slotError.message : 'Не удалось загрузить часы услуги');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setServiceSlotsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requiresServiceBooking, serviceBookingDate, serviceReservedHours, serviceBookingSection]);
 
   // Get duration based on tariff
   const getDuration = () => {
@@ -278,12 +545,19 @@ export default function PurchaseModal() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setErrorTitle('Ошибка');
     setIsSubmitting(true);
 
     try {
       // Validate required fields
       if (!visitDate && !purchaseItem?.certificate) {
         throw new Error('Выберите дату посещения');
+      }
+      if (requiresVisitTicket && (!hasVisitTariffs || !addTicket || !ticketDate || ticketPrice <= 0)) {
+        throw new Error('Для дополнительной услуги выберите тариф обязательного входного билета');
+      }
+      if (serviceBookingBlocked) {
+        throw new Error('Выберите свободное время услуги');
       }
       // Validate email
       if (email && !emailPattern.test(email)) {
@@ -312,7 +586,16 @@ export default function PurchaseModal() {
           email: email,
           phone: phone,
           customerName: name,
-          returnUrl: `${window.location.origin}/account?payment=success`,
+          requires_visit_ticket: requiresVisitTicket,
+          visit_ticket_amount: ticketPrice,
+          visit_ticket_date: ticketDate,
+          visit_ticket_tariff: ticketTariff,
+          service_booking_date: requiresServiceBooking ? serviceBookingDate : undefined,
+          service_booking_start_hour: requiresServiceBooking ? Number(serviceHour) : undefined,
+          service_booking_hours: requiresServiceBooking ? serviceReservedHours : undefined,
+          service_booking_label: requiresServiceBooking ? effectivePurchaseName : undefined,
+          service_booking_section: requiresServiceBooking ? serviceBookingSection : undefined,
+          line_items: checkoutLineItems,
           ...(purchaseItem!.certificate && {
             cert_design: purchaseItem!.certificate.design,
             cert_occasion: purchaseItem!.certificate.occasion,
@@ -334,12 +617,23 @@ export default function PurchaseModal() {
       }
 
       setBookingId(String(order.orderId));
+      setOrderKey(String(order.orderKey || ''));
+      savePendingCheckout({
+        orderId: String(order.orderId),
+        orderKey: String(order.orderKey || ''),
+        email,
+        name,
+        phone,
+        itemName: effectivePurchaseName,
+        itemPrice: `${totalPrice.toLocaleString('ru-RU')} ₽`,
+      });
 
       // Redirect to YooKassa payment page
       if (order.paymentUrl) {
         window.location.href = order.paymentUrl;
       } else {
         // If no payment URL, show success
+        markPendingCheckoutConfirmed();
         if (!isAuthenticated) {
           setGeneratedPassword(generatePassword());
         }
@@ -355,6 +649,11 @@ export default function PurchaseModal() {
   };
 
   const handleRegister = async () => {
+    if (isPaymentPreview) {
+      setStep('register');
+      return;
+    }
+
     setIsRegistering(true);
     setRegisterError('');
     try {
@@ -363,7 +662,9 @@ export default function PurchaseModal() {
         password: generatedPassword,
         name,
         phone: phone || undefined,
+        ...(bookingId && orderKey ? { orderId: bookingId, orderKey } : {}),
       });
+      clearPendingCheckout();
       setStep('register');
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : 'Ошибка регистрации');
@@ -393,6 +694,10 @@ export default function PurchaseModal() {
       setTicketDate('');
       setTicketTariff(defaultTariffId);
       setFridayTime('before18');
+      setServiceHour('');
+      setServiceSlots([]);
+      setServiceSlotsLoading(false);
+      setServiceSlotsError('');
       setAdults(1);
       setChildren(0);
       setGeneratedPassword('');
@@ -401,7 +706,9 @@ export default function PurchaseModal() {
       setRegisterError('');
       setCopied(false);
       setError('');
+      setErrorTitle('Ошибка');
       setBookingId(null);
+      setOrderKey(null);
       setIsSubmitting(false);
       setEmailTouched(false);
       setPhoneTouched(false);
@@ -416,6 +723,81 @@ export default function PurchaseModal() {
       setPhone(user.phone || '');
     }
   }, [purchaseOpen, user]);
+
+  // Frontend-only preview for reviewing the post-payment UX without creating an order.
+  useEffect(() => {
+    if (!purchaseOpen || !isPaymentPreview) return;
+
+    setName('Анна Иванова');
+    setPhone('+7 (999) 123-45-67');
+    setEmail('anna@example.com');
+    setGeneratedPassword('Tb7Kp9Rm4Wx2');
+    setBookingId('12345');
+    setStep(paymentPreview === 'registered' ? 'register' : 'success');
+  }, [isPaymentPreview, paymentPreview, purchaseOpen]);
+
+  // Restore the post-payment state after YooKassa returns to the storefront.
+  useEffect(() => {
+    if (!purchaseOpen || !paymentReturn || isPaymentPreview) return;
+
+    let cancelled = false;
+    const pending = getPendingCheckout();
+    const params = new URLSearchParams({ key: paymentReturn.orderKey });
+
+    setStep('processing');
+    setBookingId(paymentReturn.orderId);
+    setOrderKey(paymentReturn.orderKey);
+    if (pending?.orderId === paymentReturn.orderId && pending.orderKey === paymentReturn.orderKey) {
+      setName(pending.name);
+      setPhone(pending.phone);
+      setEmail(pending.email);
+    }
+
+    if (paymentReturn.status === 'cancelled') {
+      cleanPaymentReturnUrl();
+      setErrorTitle('Оплата не завершена');
+      setError('Вы вышли из оплаты. Заказ не оплачен, можно попробовать снова или выбрать другой способ.');
+      setStep('error');
+      return;
+    }
+
+    fetch(`/wp-json/termburg/v1/checkout/status/${encodeURIComponent(paymentReturn.orderId)}?${params}`)
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || 'Не удалось проверить оплату');
+        }
+        if (result.status !== 'processing' && result.status !== 'completed') {
+          throw new Error('Платеж пока не подтвержден. Если деньги списались, обновите страницу через несколько секунд.');
+        }
+        if (!cancelled) {
+          markPendingCheckoutConfirmed();
+          if (!isAuthenticated) {
+            setGeneratedPassword(generatePassword());
+          } else {
+            clearPendingCheckout();
+          }
+          cleanPaymentReturnUrl();
+          setStep('success');
+        }
+      })
+      .catch((statusError) => {
+        if (!cancelled) {
+          const message = statusError instanceof Error ? statusError.message : 'Не удалось проверить оплату';
+          if (message.includes('Платеж пока')) {
+            cleanPaymentReturnUrl();
+            setErrorTitle('Оплата не завершена');
+          } else {
+            setErrorTitle('Ошибка');
+          }
+          setError(message);
+          setStep('error');
+        }
+      })
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, isPaymentPreview, paymentReturn, purchaseOpen]);
 
   // Check if can scroll down
   const checkScroll = useCallback(() => {
@@ -483,7 +865,9 @@ export default function PurchaseModal() {
               </p>
               {(purchaseItem.name.includes('Будни') || purchaseItem.name.includes('Выходные')) && (
                 <p className="mt-2 text-xs text-text-secondary/70">
-                  {pricingContent.fridayNote || 'Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных'}
+                  {mainTicketUsesFridayWeekendAllDay
+                    ? 'Пятница: для этого тарифа весь день действует тариф выходного дня'
+                    : (pricingContent.fridayNote || 'Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных')}
                 </p>
               )}
               {isTicket && visitDate && (
@@ -506,7 +890,7 @@ export default function PurchaseModal() {
                   required
                   value={visitDate}
                   onChange={(e) => setVisitDate(e.target.value)}
-                  min={getToday()}
+                  min={serviceVisitMinDate}
                   max={getMaxDate()}
                   className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-colors"
                 />
@@ -599,18 +983,21 @@ export default function PurchaseModal() {
             )}
 
             {/* Добавить входной билет */}
-            {isService && hasVisitTariffs && (
+            {requiresVisitTicket && hasVisitTariffs && (
               <div className="rounded-xl bg-amber-50 border border-amber-200/60 overflow-hidden">
-                <label className="flex items-center gap-3 px-5 py-4 cursor-pointer transition-colors hover:bg-amber-100/50">
+                <label className="flex items-center gap-3 px-5 py-4">
                   <input
                     type="checkbox"
                     checked={addTicket}
-                    onChange={(e) => setAddTicket(e.target.checked)}
-                    className="h-4 w-4 rounded border-amber-300 text-primary focus:ring-primary/30"
+                    disabled
+                    className="h-4 w-4 rounded border-amber-300 text-primary focus:ring-primary/30 disabled:opacity-100"
                   />
                   <div className="flex items-center gap-1.5 flex-1">
                     <Ticket className="w-4 h-4 text-amber-600" />
-                    <span className="text-sm font-semibold text-amber-800">Добавить входной билет</span>
+                    <div>
+                      <span className="block text-sm font-semibold text-amber-800">Входной билет обязателен</span>
+                      <span className="block text-xs text-amber-700/80">Оплачивается отдельно. Можно выбрать тариф больше 1 часа.</span>
+                    </div>
                   </div>
                   {addTicket && ticketPrice > 0 && (
                     <span className="text-sm font-bold text-primary">+{ticketPrice.toLocaleString('ru-RU')} ₽</span>
@@ -627,15 +1014,18 @@ export default function PurchaseModal() {
                       </label>
                       <input
                         type="date"
+                        required
                         value={ticketDate}
                         onChange={(e) => setTicketDate(e.target.value)}
-                        min={getToday()}
+                        min={serviceVisitMinDate}
                         className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
                       />
                     </div>
 
+                    {renderServiceBookingTimePicker()}
+
                     {/* Пятница: до/после 18:00 */}
-                    {ticketDate && isFriday(ticketDate) && !isSpecialWeekendDate(ticketDate, specialWeekendDates) && (
+                    {ticketDate && isFriday(ticketDate) && !isSpecialWeekendDate(ticketDate, specialWeekendDates) && !ticketUsesFridayWeekendAllDay && (
                       <div>
                         <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-800">
                           <Clock className="w-3.5 h-3.5" />
@@ -856,7 +1246,7 @@ export default function PurchaseModal() {
             {/* Submit */}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || serviceBookingBlocked}
               className="w-full rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-primary-light active:brightness-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
@@ -872,12 +1262,22 @@ export default function PurchaseModal() {
               )}
             </button>
           </form>
+        ) : step === 'processing' ? (
+          <div className="p-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+            <h3 className="mb-2 font-heading text-xl font-bold text-text-primary">Проверяем оплату</h3>
+            <p className="text-text-secondary">
+              Подождите несколько секунд, пока мы получим подтверждение платежа.
+            </p>
+          </div>
         ) : step === 'error' ? (
           <div className="p-8 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
               <AlertCircle className="h-8 w-8 text-red-500" />
             </div>
-            <h3 className="mb-2 font-heading text-xl font-bold text-text-primary">Ошибка</h3>
+            <h3 className="mb-2 font-heading text-xl font-bold text-text-primary">{errorTitle}</h3>
             <p className="mb-6 text-text-secondary">{error}</p>
             <div className="space-y-3">
               <button
@@ -898,10 +1298,10 @@ export default function PurchaseModal() {
             </div>
             <h3 className="mb-2 font-heading text-xl font-bold text-text-primary">Заказ оформлен!</h3>
             <p className="mb-6 text-text-secondary">
-              Перенаправляем на страницу оплаты...
+              Оплата прошла успешно. Информация о заказе отправлена на ваш email.
             </p>
             {/* Registration offer for non-authenticated users */}
-            {!isAuthenticated && (
+            {(!isAuthenticated || isPaymentPreview) && (
               <div className="mb-6 rounded-xl bg-primary/5 border border-primary/20 p-4 text-left">
                 <div className="flex items-center gap-2 mb-2">
                   <UserPlus className="h-5 w-5 text-primary" />

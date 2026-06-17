@@ -18,6 +18,7 @@ export interface WPPricingItem {
   adultPrice: number;
   childPrice: number;
   discount: number | null;
+  fridayWeekendAllDay?: boolean;
   description?: string;
   badge?: string;
   badgeVariant?: 'default' | 'gold' | 'success' | string;
@@ -57,6 +58,21 @@ export interface WPBookingModalContent {
   emailPlaceholder?: string;
   submitLabel?: string;
   whatToBringLabel?: string;
+  additionalServices?: WPModalServiceCategory[];
+}
+
+export interface WPModalServiceCategory {
+  id: string;
+  title: string;
+  items: WPModalServiceItem[];
+}
+
+export interface WPModalServiceItem {
+  id: string;
+  name: string;
+  price: number;
+  duration: string;
+  description: string;
 }
 
 export interface WPPurchaseModalContent {
@@ -453,7 +469,8 @@ export interface WPGalleryItem {
 }
 
 export interface WPScheduleEvent {
-  id: number;
+  id: number | string;
+  date?: string;
   name?: string;
   title?: string;
   description: string;
@@ -461,12 +478,14 @@ export interface WPScheduleEvent {
   duration: string;
   day?: string[];
   weekdays?: string[];
-  type?: 'free' | 'paid' | 'special' | string;
+  type?: 'free' | 'paid' | 'special' | 'closed' | string;
   location?: string;
   isFree?: boolean;
   price: number | null;
   instructor?: string;
   highlight: boolean;
+  closed?: boolean;
+  sanitaryDay?: boolean;
 }
 
 export interface WPPromotion {
@@ -671,6 +690,59 @@ export interface WPAboutContent {
   galleryPhotos?: WPAboutGalleryPhoto[];
 }
 
+export interface WPFamilyService {
+  id: string;
+  icon: 'waves' | 'graduation' | 'thermometer' | 'heart' | 'party' | 'sparkles' | string;
+  title: string;
+  description: string;
+  features: string[];
+  image: string;
+  link?: string;
+  linkText?: string;
+  badge?: string;
+  price?: string;
+  visible?: boolean;
+}
+
+export interface WPFamilyContent {
+  pageTitle?: string;
+  metaDescription?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  heroImage?: string;
+  intro?: {
+    title?: string;
+    text?: string;
+  };
+  services?: {
+    title?: string;
+    subtitle?: string;
+    items?: WPFamilyService[];
+  };
+  schedule?: {
+    title?: string;
+    text?: string;
+    buttonText?: string;
+    link?: string;
+  };
+  safety?: {
+    title?: string;
+    subtitle?: string;
+    rules?: string[];
+    linkText?: string;
+    link?: string;
+  };
+  cta?: {
+    title?: string;
+    text?: string;
+    primaryButton?: string;
+    secondaryButton?: string;
+    secondaryLink?: string;
+    phoneLabel?: string;
+    phone?: string;
+  };
+}
+
 export const api = {
   // Pricing
   getPricing: () => fetchAPI<WPPricingResponse>('/pricing'),
@@ -693,6 +765,7 @@ export const api = {
   getSchoolsContent: () => fetchAPI<WPSchoolsContent>('/schools-content'),
   getContactsContent: () => fetchAPI<WPContactsContent>('/contacts-content'),
   getAboutContent: () => fetchAPI<WPAboutContent>('/about-content'),
+  getFamilyContent: () => fetchAPI<WPFamilyContent>('/family-content'),
 
   // Settings
   getSettings: () => fetchAPI<WPSettings>('/settings'),

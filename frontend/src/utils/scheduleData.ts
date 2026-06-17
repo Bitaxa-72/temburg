@@ -1,5 +1,5 @@
 import type { WPScheduleEvent } from '@/api/wordpress';
-import { scheduleEvents as fallbackEvents, type ScheduleEvent } from '@/data/schedule';
+import type { ScheduleEvent } from '@/data/schedule';
 
 function normalizeDays(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -14,8 +14,14 @@ function normalizeDays(value: unknown): string[] {
 }
 
 function normalizeType(event: WPScheduleEvent): ScheduleEvent['type'] {
-  if (event.highlight) {
-    return 'special';
+  const price = Number(event.price) || 0;
+
+  if (event.closed || event.sanitaryDay || event.type === 'closed') {
+    return 'closed';
+  }
+
+  if (price > 0) {
+    return 'paid';
   }
 
   if (event.type === 'free' || event.type === 'paid' || event.type === 'special') {
@@ -25,13 +31,13 @@ function normalizeType(event: WPScheduleEvent): ScheduleEvent['type'] {
   if (event.isFree === true) {
     return 'free';
   }
-
-  return event.price ? 'paid' : 'free';
+  return 'free';
 }
 
 export function mapWPScheduleEvent(event: WPScheduleEvent, index = 0): ScheduleEvent {
   return {
-    id: Number(event.id) || index + 1,
+    id: event.id || index + 1,
+    date: event.date || undefined,
     name: event.name || event.title || '',
     time: event.time || '',
     duration: event.duration || '',
@@ -40,16 +46,16 @@ export function mapWPScheduleEvent(event: WPScheduleEvent, index = 0): ScheduleE
     description: event.description || '',
     instructor: event.instructor || undefined,
     location: event.location || undefined,
-    price: event.price || undefined,
+    price: Number(event.price) > 0 ? Number(event.price) : undefined,
     highlight: Boolean(event.highlight),
+    closed: Boolean(event.closed),
+    sanitaryDay: Boolean(event.sanitaryDay),
   };
 }
 
 export function mapScheduleData(events?: WPScheduleEvent[] | null): ScheduleEvent[] {
   const wpEvents = Array.isArray(events) ? events : [];
-  const mapped = wpEvents
+  return wpEvents
     .map(mapWPScheduleEvent)
-    .filter((event) => event.name && event.time && event.day.length > 0);
-
-  return mapped.length ? mapped : fallbackEvents;
+    .filter((event) => event.name && (event.type === 'closed' || event.time) && (event.date || event.day.length > 0));
 }

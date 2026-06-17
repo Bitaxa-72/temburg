@@ -4,6 +4,7 @@ export interface PricingSlot {
   duration: string;
   adultPrice: number;
   childPrice: number;
+  fridayWeekendAllDay?: boolean;
 }
 
 export interface Subscription {
@@ -65,6 +66,7 @@ export const weekdayPricing: PricingSlot[] = [
   },
   {
     id: 'wd-unlimited',
+    fridayWeekendAllDay: true,
     name: 'Безлимит на день',
     duration: '9:00–23:00',
     adultPrice: 2500,
@@ -103,6 +105,7 @@ export const weekendPricing: PricingSlot[] = [
   },
   {
     id: 'we-unlimited',
+    fridayWeekendAllDay: true,
     name: 'Безлимит на день',
     duration: '9:00–23:00',
     adultPrice: 3250,
@@ -262,4 +265,3 @@ export const merchItems: MerchItem[] = [
   { id: 'merch-slippers', name: 'Тапочки Термбург', price: 800, description: 'Уютные войлочные тапочки' },
   { id: 'merch-cap', name: 'Банная шапка', price: 600, description: 'Войлочная шапка для парной с логотипом' },
 ];
-

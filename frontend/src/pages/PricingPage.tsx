@@ -28,6 +28,7 @@ import { useBooking } from '@/context/BookingContext';
 import { usePricing } from '@/hooks/useWordPressData';
 import PricingPreviewSection from '@/components/sections/home/PricingPreviewSection';
 import type { WPGiftBox, WPMerchItem } from '@/api/wordpress';
+import { getTariffOptionId } from '@/utils/pricingTariffs';
 
 const serviceLinks = [
   { name: 'Парения и SPA', image: '/images/heroes/services.webp', href: '/services' },
@@ -151,7 +152,14 @@ function PricingCards() {
           return (
             <div
               key={slot.id}
-              onClick={() => openPurchase({ name: `${tabLabel} — ${slot.name}`, price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽` })}
+              onClick={() => openPurchase({
+                name: `${tabLabel} — ${slot.name}`,
+                price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽`,
+                childPrice: `${slot.childPrice.toLocaleString('ru-RU')} ₽`,
+                tariffId: getTariffOptionId(slot),
+                tariffLabel: slot.name,
+                tariffPeriod: tab,
+              })}
               className={`relative rounded-2xl border p-6 transition-all duration-300 cursor-pointer hover:-translate-y-1 hover:shadow-lg ${
                 isHit
                   ? 'bg-gradient-to-br from-primary/5 to-primary/10 border-primary/30 ring-1 ring-primary/10'

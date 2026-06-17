@@ -182,6 +182,7 @@ export function usePricingWithFallback() {
       adultPrice: p.adultPrice,
       childPrice: p.childPrice,
       discount: null,
+      fridayWeekendAllDay: p.fridayWeekendAllDay,
       description: '',
     })),
     weekend: weekendPricing.map(p => ({
@@ -191,6 +192,7 @@ export function usePricingWithFallback() {
       adultPrice: p.adultPrice,
       childPrice: p.childPrice,
       discount: null,
+      fridayWeekendAllDay: p.fridayWeekendAllDay,
       description: '',
     })),
     subscriptions: [],

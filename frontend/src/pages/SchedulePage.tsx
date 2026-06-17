@@ -6,7 +6,7 @@ import Section from '@/components/ui/Section';
 import Container from '@/components/ui/Container';
 import { useBooking } from '@/context/BookingContext';
 import { useSchedule } from '@/hooks/useWordPressData';
-import { scheduleEvents as fallbackEvents, daysOfWeek, type ScheduleEvent } from '@/data/schedule';
+import { daysOfWeek, type ScheduleEvent } from '@/data/schedule';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
 import { mapScheduleData } from '@/utils/scheduleData';
@@ -86,33 +86,64 @@ const monthNames = [
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
 ];
 
-function getCurrentDayName(): string {
-  const jsDay = new Date().getDay();
-  const idx = jsDay === 0 ? 6 : jsDay - 1;
-  return daysOfWeek[idx];
-}
-
 function getDayNameByDate(date: Date): string {
   const jsDay = date.getDay();
   const idx = jsDay === 0 ? 6 : jsDay - 1;
   return daysOfWeek[idx];
 }
 
-// Global variable that will be set by the component
-let scheduleEvents: ScheduleEvent[] = fallbackEvents;
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
-function eventsForDay(dayName: string): ScheduleEvent[] {
-  return scheduleEvents.filter((e) => Array.isArray(e.day) && e.day.includes(dayName));
+function getWeekDates(date: Date): Date[] {
+  const monday = new Date(date);
+  const weekday = monday.getDay();
+  monday.setDate(monday.getDate() - (weekday === 0 ? 6 : weekday - 1));
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(monday);
+    day.setDate(monday.getDate() + index);
+    return day;
+  });
+}
+
+function eventsForDate(events: ScheduleEvent[], date: Date): ScheduleEvent[] {
+  const dateKey = formatDateKey(date);
+  const dayName = getDayNameByDate(date);
+  return events.filter((event) => event.date ? event.date === dateKey : Array.isArray(event.day) && event.day.includes(dayName));
+}
+
+function isSanitaryScheduleEvent(event: ScheduleEvent): boolean {
+  return event.type === 'closed' || Boolean(event.closed) || Boolean(event.sanitaryDay);
+}
+
+function visibleEventsForDate(events: ScheduleEvent[], date: Date): ScheduleEvent[] {
+  return eventsForDate(events, date).filter((event) => !isSanitaryScheduleEvent(event));
+}
+
+function getSanitaryNotice(events: ScheduleEvent[], date: Date): string | null {
+  const manual = eventsForDate(events, date).find(isSanitaryScheduleEvent);
+  if (manual) {
+    return manual.description || manual.name || 'Санитарный день';
+  }
+
+  void isSanitaryDay(date);
+  return null;
 }
 
 function EventRow({ event, showDays }: { event: ScheduleEvent; showDays?: boolean }) {
   const { openPurchase } = useBooking();
-  const isPaid = event.type === 'paid';
-  const isSpecial = event.type === 'special';
+  const hasPrice = Number(event.price) > 0;
+  const isPaid = event.type === 'paid' || hasPrice;
+  const isSpecial = event.type === 'special' || Boolean(event.highlight);
+  const canPurchase = hasPrice;
 
   const borderClass = isSpecial
     ? 'bg-amber-50 border border-amber-300/50 hover:border-amber-400/70'
-    : isPaid
+    : canPurchase
       ? 'bg-surface border border-primary/15 hover:border-primary/30 cursor-pointer'
       : 'bg-surface border border-border/40';
 
@@ -122,12 +153,24 @@ function EventRow({ event, showDays }: { event: ScheduleEvent; showDays?: boolea
     <div
       className={`flex items-center gap-4 rounded-2xl p-4 transition-all duration-200 ${borderClass}`}
       onClick={() => {
-        if (isPaid && event.price) {
-          openPurchase({ name: event.name, price: `${event.price} \u20BD` });
+        if (canPurchase) {
+          openPurchase({
+            name: event.name,
+            price: `${event.price} \u20BD`,
+            duration: event.duration,
+            requiresVisitTicket: true,
+            lineItems: [{
+              name: event.name,
+              price: Number(event.price) || 0,
+              quantity: 1,
+              duration: event.duration,
+              kind: 'service',
+            }],
+          });
         }
       }}
-      role={isPaid ? 'button' : undefined}
-      tabIndex={isPaid ? 0 : undefined}
+      role={canPurchase ? 'button' : undefined}
+      tabIndex={canPurchase ? 0 : undefined}
     >
       <div className="flex-shrink-0 w-16 text-center">
         <span className={`font-heading text-lg font-bold whitespace-nowrap ${isSpecial ? 'text-amber-600' : 'text-primary'}`}>{event.time}</span>
@@ -160,11 +203,15 @@ function EventRow({ event, showDays }: { event: ScheduleEvent; showDays?: boolea
         )}
       </div>
       <div className="flex-shrink-0">
-        {isPaid && event.price ? (
+        {canPurchase ? (
           <div className="flex items-center gap-1">
             <span className="text-sm font-bold text-primary">{event.price} &#8381;</span>
             <ChevronRight className="w-3.5 h-3.5 text-primary/50" />
           </div>
+        ) : isPaid ? (
+          <span className="inline-block rounded-full bg-border/40 text-text-secondary px-2.5 py-0.5 text-xs font-semibold">
+            Скоро
+          </span>
         ) : (
           <span className="inline-block rounded-full bg-emerald-500/10 text-emerald-600 px-2.5 py-0.5 text-xs font-semibold">
             Бесплатно
@@ -187,6 +234,7 @@ function getMonthDays(year: number, month: number) {
 }
 
 interface CalendarProps {
+  events: ScheduleEvent[];
   year: number;
   month: number;
   selectedDate: Date | null;
@@ -200,14 +248,17 @@ function DayCell({
   isSelected,
   isToday,
   onSelect,
+  events,
 }: {
   date: Date;
   isSelected: boolean;
   isToday: boolean;
   onSelect: (date: Date) => void;
+  events: ScheduleEvent[];
 }) {
-  const dayName = getDayNameByDate(date);
-  const dayEvents = eventsForDay(dayName);
+  const sanitaryNotice = getSanitaryNotice(events, date);
+  const isSanitary = Boolean(sanitaryNotice);
+  const dayEvents = visibleEventsForDate(events, date);
   const hasPaid = dayEvents.some((e) => e.type === 'paid');
   const hasFree = dayEvents.some((e) => e.type === 'free');
   const hasSpecial = dayEvents.some((e) => e.type === 'special');
@@ -217,10 +268,12 @@ function DayCell({
     <button
       type="button"
       onClick={() => onSelect(date)}
-      title={holiday || undefined}
+      title={sanitaryNotice || holiday || undefined}
       className={`aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all duration-150 text-xs ${
         isSelected
           ? 'bg-primary text-white font-bold shadow-sm shadow-primary/20'
+          : isSanitary
+            ? 'bg-gradient-to-br from-orange-100 to-amber-50 text-orange-700 font-bold ring-1 ring-orange-400'
           : holiday
             ? 'bg-gradient-to-br from-emerald-100 to-emerald-50 text-emerald-700 font-bold ring-1 ring-emerald-400'
             : isToday
@@ -229,8 +282,9 @@ function DayCell({
       }`}
     >
       <span>{date.getDate()}</span>
-      {holiday && !isSelected && <Sparkles className="w-2.5 h-2.5 text-emerald-500" />}
-      {!holiday && dayEvents.length > 0 && (
+      {isSanitary && !isSelected && <X className="w-2.5 h-2.5 text-orange-500" />}
+      {!isSanitary && holiday && !isSelected && <Sparkles className="w-2.5 h-2.5 text-emerald-500" />}
+      {!isSanitary && !holiday && dayEvents.length > 0 && (
         <div className="flex gap-px">
           {hasFree && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white/70' : 'bg-emerald-500'}`} />}
           {hasPaid && <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white/70' : 'bg-primary'}`} />}
@@ -241,7 +295,7 @@ function DayCell({
   );
 }
 
-function CalendarPanel({ year, month, selectedDate, onSelectDate, onPrevMonth, onNextMonth }: CalendarProps) {
+function CalendarPanel({ events, year, month, selectedDate, onSelectDate, onPrevMonth, onNextMonth }: CalendarProps) {
   const { daysInMonth, startOffset } = getMonthDays(year, month);
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
@@ -287,6 +341,7 @@ function CalendarPanel({ year, month, selectedDate, onSelectDate, onPrevMonth, o
               isSelected={!!isSelected}
               isToday={isToday}
               onSelect={onSelectDate}
+              events={events}
             />
           );
         })}
@@ -314,11 +369,13 @@ function CalendarPanel({ year, month, selectedDate, onSelectDate, onPrevMonth, o
 /* ---- Full-page month calendar ---- */
 
 function FullMonthCalendar({
+  events,
   year,
   month,
   onPrevMonth,
   onNextMonth,
 }: {
+  events: ScheduleEvent[];
   year: number;
   month: number;
   onPrevMonth: () => void;
@@ -336,7 +393,7 @@ function FullMonthCalendar({
   while (cells.length % 7 !== 0) cells.push(null);
 
   const expandedEvents = expandedDay
-    ? eventsForDay(getDayNameByDate(new Date(year, month, expandedDay)))
+    ? visibleEventsForDate(events, new Date(year, month, expandedDay))
     : [];
 
   const handleDayClick = (day: number) => {
@@ -415,20 +472,20 @@ function FullMonthCalendar({
             }
             const date = new Date(year, month, day);
             const isToday = isCurrentMonth && today.getDate() === day;
-            const dayName = getDayNameByDate(date);
-            const dayEvts = eventsForDay(dayName);
+            const dayEvts = visibleEventsForDate(events, date);
             const isExpanded = expandedDay === day;
             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
             const hasEvents = dayEvts.length > 0;
             const holiday = getHoliday(date);
-            const isSanitary = isSanitaryDay(date);
+            const sanitaryNotice = getSanitaryNotice(events, date);
+            const isSanitary = Boolean(sanitaryNotice);
 
             return (
               <button
                 key={day}
                 type="button"
                 onClick={() => handleDayClick(day)}
-                title={isSanitary ? 'Санитарный день' : holiday || undefined}
+                title={sanitaryNotice || holiday || undefined}
                 className={`group relative min-h-[110px] sm:min-h-[140px] rounded-2xl p-2.5 sm:p-3 text-left flex flex-col transition-all duration-300 ${
                   isExpanded
                     ? 'bg-gradient-to-br from-primary/20 to-primary/10 ring-2 ring-primary shadow-xl shadow-primary/20 scale-[1.03] z-10'
@@ -540,7 +597,7 @@ function FullMonthCalendar({
           <div ref={scheduleRef} className="mt-10 rounded-3xl bg-gradient-to-br from-white via-surface to-surface-warm border-2 border-primary/30 p-6 md:p-10 shadow-2xl shadow-primary/10 animate-fade-in">
             <div className="flex items-center justify-between mb-8">
               <div>
-                {isSanitaryDay(new Date(year, month, expandedDay)) && (
+                {getSanitaryNotice(events, new Date(year, month, expandedDay)) && (
                   <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-orange-600 text-white rounded-full mb-3 mr-2">
                     <X className="w-4 h-4" />
                     <span className="text-xs font-bold uppercase tracking-wider">Санитарный день</span>
@@ -613,10 +670,8 @@ export default function SchedulePage() {
   // Если в админке для slug «schedule» добавлены блоки — они показываются после PageHero.
   const { data: pageContent } = usePageContent('schedule');
 
-  const currentDay = getCurrentDayName();
   const now = new Date();
 
-  const [activeDay, setActiveDay] = useState(currentDay);
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
   const [selectedDate, setSelectedDate] = useState<Date>(now);
@@ -625,13 +680,12 @@ export default function SchedulePage() {
   // Fetch schedule from WordPress
   const { data: wpSchedule, loading } = useSchedule();
 
-  // Update global scheduleEvents when data is loaded
-  useMemo(() => {
-    scheduleEvents = mapScheduleData(wpSchedule);
-  }, [wpSchedule]);
+  const scheduleEvents = useMemo(() => mapScheduleData(wpSchedule), [wpSchedule]);
+  const hasScheduleEvents = scheduleEvents.length > 0;
 
-  const displayDayName = getDayNameByDate(selectedDate);
-  const dayEvents = useMemo(() => eventsForDay(displayDayName), [displayDayName, wpSchedule]);
+  const selectedWeekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
+  const dayEvents = useMemo(() => visibleEventsForDate(scheduleEvents, selectedDate), [scheduleEvents, selectedDate]);
+  const selectedSanitaryNotice = useMemo(() => getSanitaryNotice(scheduleEvents, selectedDate), [scheduleEvents, selectedDate]);
 
   if (loading) {
     return (
@@ -651,6 +705,30 @@ export default function SchedulePage() {
     );
   }
 
+  if (!hasScheduleEvents) {
+    return (
+      <PageLayout title="Расписание" description="Расписание мероприятий термального комплекса Термбург.">
+        <PageHero
+          title="Расписание"
+          subtitle="Коллективные парения, аквааэробика, йога и другие мероприятия"
+          backgroundImage="/images/heroes/schedule.webp"
+        />
+        {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
+        <Section>
+          <div className="mx-auto max-w-xl rounded-2xl border border-border bg-surface px-6 py-12 text-center">
+            <Clock className="w-10 h-10 text-primary/50 mx-auto mb-4" />
+            <h2 className="font-heading text-2xl font-bold text-text-primary mb-3">
+              Расписание появится позже
+            </h2>
+            <p className="text-text-secondary leading-relaxed">
+              Мы пока готовим актуальную программу мероприятий. Как только расписание будет опубликовано, оно появится на этой странице.
+            </p>
+          </div>
+        </Section>
+      </PageLayout>
+    );
+  }
+
   function prevMonth() {
     if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1); }
     else setCalMonth((m) => m - 1);
@@ -662,19 +740,10 @@ export default function SchedulePage() {
 
   function handleDateSelect(date: Date) {
     setSelectedDate(date);
-    setActiveDay(getDayNameByDate(date));
   }
 
-  function handleDayTab(day: string) {
-    setActiveDay(day);
-    for (let d = 1; d <= 31; d++) {
-      const date = new Date(calYear, calMonth, d);
-      if (date.getMonth() !== calMonth) break;
-      if (getDayNameByDate(date) === day) {
-        setSelectedDate(date);
-        break;
-      }
-    }
+  function handleDayTab(date: Date) {
+    setSelectedDate(date);
   }
 
   return (
@@ -721,14 +790,15 @@ export default function SchedulePage() {
           <div className="flex flex-col lg:flex-row gap-8">
             <div className="flex-1 min-w-0">
               <div className="flex gap-1.5 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-                {daysOfWeek.map((day) => {
-                  const isActive = activeDay === day;
-                  const isCurrent = day === currentDay;
+                {selectedWeekDates.map((date) => {
+                  const day = getDayNameByDate(date);
+                  const isActive = formatDateKey(selectedDate) === formatDateKey(date);
+                  const isCurrent = formatDateKey(now) === formatDateKey(date);
                   return (
                     <button
-                      key={day}
+                      key={formatDateKey(date)}
                       type="button"
-                      onClick={() => handleDayTab(day)}
+                      onClick={() => handleDayTab(date)}
                       className={`flex-shrink-0 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
                         isActive
                           ? 'bg-primary text-white shadow-md shadow-primary/20'
@@ -738,6 +808,7 @@ export default function SchedulePage() {
                       }`}
                     >
                       {dayShortNames[day]}
+                      <span className="ml-1 text-[10px] opacity-60">{date.getDate()}</span>
                       {isCurrent && !isActive && (
                         <span className="ml-1 text-[10px] opacity-60">(сегодня)</span>
                       )}
@@ -750,7 +821,17 @@ export default function SchedulePage() {
                 {selectedDate.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}
               </p>
 
-              {dayEvents.length > 0 ? (
+              {selectedSanitaryNotice ? (
+                <div className="rounded-2xl border border-orange-300 bg-orange-50 p-6 text-orange-800">
+                  <div className="flex items-center gap-3">
+                    <X className="w-5 h-5" />
+                    <div>
+                      <p className="font-heading text-lg font-bold">Санитарный день</p>
+                      <p className="mt-1 text-sm">{selectedSanitaryNotice}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : dayEvents.length > 0 ? (
                 <div className="space-y-2.5">
                   {dayEvents.map((event) => (
                     <EventRow key={event.id} event={event} />
@@ -767,6 +848,7 @@ export default function SchedulePage() {
             <div className="lg:w-[320px] flex-shrink-0">
               <div className="lg:sticky lg:top-24">
                 <CalendarPanel
+                  events={scheduleEvents}
                   year={calYear}
                   month={calMonth}
                   selectedDate={selectedDate}
@@ -782,6 +864,7 @@ export default function SchedulePage() {
         {/* MONTH MODE — full-width big calendar */}
         {viewMode === 'month' && (
           <FullMonthCalendar
+            events={scheduleEvents}
             year={calYear}
             month={calMonth}
             onPrevMonth={prevMonth}

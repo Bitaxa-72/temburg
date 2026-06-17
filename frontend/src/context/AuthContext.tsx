@@ -13,6 +13,7 @@ import {
   type RegisterData,
   type LoginData,
 } from '@/services/api';
+import { claimPendingCheckout, clearPendingCheckout, getPendingCheckout } from '@/utils/paymentReturn';
 
 interface AuthContextType {
   user: User | null;
@@ -60,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await authApi.login(data);
       localStorage.setItem('termburg_token', result.token);
       setUser(result.user);
+      await claimPendingCheckout(result.token);
       navigate('/account');
     },
     [navigate]
@@ -67,9 +69,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (data: RegisterData) => {
-      const result = await authApi.register(data);
+      const pendingCheckout = getPendingCheckout();
+      const result = await authApi.register({
+        ...data,
+        ...(pendingCheckout?.confirmed ? {
+          orderId: pendingCheckout.orderId,
+          orderKey: pendingCheckout.orderKey,
+        } : {}),
+      });
       localStorage.setItem('termburg_token', result.token);
       setUser(result.user);
+      clearPendingCheckout();
       navigate('/account');
     },
     [navigate]

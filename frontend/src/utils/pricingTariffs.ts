@@ -4,6 +4,7 @@ export interface TariffPricingSlot {
   duration?: string;
   adultPrice: number;
   childPrice: number;
+  fridayWeekendAllDay?: boolean;
 }
 
 export interface TariffOption {
@@ -11,6 +12,7 @@ export interface TariffOption {
   label: string;
   duration: number;
   durationText: string;
+  fridayWeekendAllDay?: boolean;
 }
 
 function normalizeText(value: unknown) {
@@ -19,6 +21,11 @@ function normalizeText(value: unknown) {
 
 function normalizeKey(value: unknown) {
   return normalizeText(value).toLocaleLowerCase('ru-RU');
+}
+
+function getEmbeddedTariffKey(tariffId: string) {
+  const separatorIndex = tariffId.indexOf('::');
+  return separatorIndex >= 0 ? tariffId.slice(separatorIndex + 2) : '';
 }
 
 function parseDurationMinutes(text: string) {
@@ -58,6 +65,7 @@ export function getTariffOptions(...groups: Array<TariffPricingSlot[] | undefine
       label,
       duration: parseDurationMinutes(durationText || label),
       durationText,
+      fridayWeekendAllDay: Boolean(slot.fridayWeekendAllDay),
     });
   });
 
@@ -79,9 +87,24 @@ export function findPricingSlot(
 ) {
   const option = options.find((item) => item.id === tariffId);
   const optionKey = option ? normalizeKey(option.label) : '';
+  const embeddedKey = getEmbeddedTariffKey(tariffId);
 
   return slots.find((slot) => getTariffOptionId(slot) === tariffId)
     ?? slots.find((slot) => optionKey !== '' && normalizeKey(slot.name) === optionKey)
+    ?? slots.find((slot) => embeddedKey !== '' && normalizeKey(slot.name) === embeddedKey)
     ?? slots.find((slot) => normalizeText(slot.id) === tariffId)
     ?? null;
+}
+
+export function tariffUsesFridayWeekendAllDay(
+  options: TariffOption[],
+  tariffId: string,
+  ...groups: Array<TariffPricingSlot[] | undefined>
+) {
+  const option = options.find((item) => item.id === tariffId);
+  if (option?.fridayWeekendAllDay) return true;
+
+  return groups
+    .flatMap((group) => group ?? [])
+    .some((slot) => findPricingSlot([slot], tariffId, options)?.fridayWeekendAllDay);
 }

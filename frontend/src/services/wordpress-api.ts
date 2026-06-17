@@ -75,7 +75,8 @@ export interface ServiceCategory {
 }
 
 export interface ScheduleEvent {
-  id: number;
+  id: number | string;
+  date?: string;
   name: string;
   description: string;
   time: string;
@@ -108,6 +109,7 @@ export interface PricingItem {
   adultPrice: number;
   childPrice: number;
   discount: number | null;
+  fridayWeekendAllDay?: boolean;
   description: string;
 }
 

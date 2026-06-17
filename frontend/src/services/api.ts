@@ -138,6 +138,8 @@ export interface RegisterData {
   password: string;
   name: string;
   phone?: string;
+  orderId?: string;
+  orderKey?: string;
 }
 
 export interface LoginData {

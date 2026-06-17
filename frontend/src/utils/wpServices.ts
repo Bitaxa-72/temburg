@@ -1,6 +1,8 @@
 import type { WPService, WPServicesResponse } from '@/api/wordpress';
 import type { ServiceItem } from '@/data/services';
 
+type WPServiceCategoryLike = WPServicesResponse[string] | WPService[] | undefined;
+
 function normalizeIdPart(value: string | number | null | undefined): string {
   return String(value ?? '')
     .toLowerCase()
@@ -8,6 +10,14 @@ function normalizeIdPart(value: string | number | null | undefined): string {
     .replace(/[^a-zа-яё0-9_-]+/gi, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+function getCategoryItems(category: WPServiceCategoryLike): WPService[] {
+  if (Array.isArray(category)) {
+    return category;
+  }
+
+  return Array.isArray(category?.items) ? category.items : [];
 }
 
 export function wpToServiceItem(wp: WPService, category = 'service', index = 0): ServiceItem {
@@ -32,7 +42,7 @@ export function wpServiceItems(
   category: string,
   fallback: ServiceItem[],
 ): ServiceItem[] {
-  const items = services?.[category]?.items;
+  const items = getCategoryItems(services?.[category]);
   return items?.length ? items.map((item, index) => wpToServiceItem(item, category, index)) : fallback;
 }
 
@@ -40,7 +50,7 @@ export function wpServiceImages(services: WPServicesResponse | null | undefined)
   const images: Record<string, string> = {};
 
   Object.values(services || {}).forEach((category) => {
-    category?.items?.forEach((service) => {
+    getCategoryItems(category).forEach((service) => {
       if (service.image) {
         images[service.slug || String(service.id)] = service.image;
       }

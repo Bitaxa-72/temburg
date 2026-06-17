@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import type { BathType } from '@/data/thermalZones';
+import type { ServiceBookingSection } from '@/utils/serviceBooking';
+import { getPaymentReturnParams, getPendingCheckout } from '@/utils/paymentReturn';
 
 export interface CertificateMeta {
   design: string;
@@ -15,10 +17,28 @@ export interface CertificateMeta {
   backImage?: string;
 }
 
-interface PurchaseItem {
+export interface CheckoutLineItem {
+  name: string;
+  price: number;
+  quantity?: number;
+  duration?: string;
+  serviceDate?: string;
+  serviceStartHour?: number;
+  reservedHours?: number;
+  serviceSection?: ServiceBookingSection;
+  kind?: 'adult_ticket' | 'child_ticket' | 'visit_ticket' | 'service' | 'subscription' | 'certificate' | 'product';
+}
+
+export interface PurchaseItem {
   name: string;
   price: string;
   childPrice?: string;
+  duration?: string;
+  requiresVisitTicket?: boolean;
+  tariffId?: string;
+  tariffLabel?: string;
+  tariffPeriod?: 'weekday' | 'weekend';
+  lineItems?: CheckoutLineItem[];
   certificate?: CertificateMeta;
 }
 
@@ -26,6 +46,29 @@ interface SwimmingEnrollmentItem {
   programName: string;
   price: number;
 }
+
+const paymentPreview = import.meta.env.DEV
+  ? new URLSearchParams(window.location.search).get('payment-preview')
+  : null;
+const paymentPreviewItem: PurchaseItem = {
+  name: 'Безлимитное посещение',
+  price: '2 500 ₽',
+};
+const paymentReturn = getPaymentReturnParams();
+const pendingCheckout = getPendingCheckout();
+const restoredPurchaseItem: PurchaseItem | null = paymentReturn
+  ? {
+      name: pendingCheckout?.orderId === paymentReturn.orderId
+        && pendingCheckout.orderKey === paymentReturn.orderKey
+        ? pendingCheckout.itemName
+        : 'Заказ',
+      price: pendingCheckout?.orderId === paymentReturn.orderId
+        && pendingCheckout.orderKey === paymentReturn.orderKey
+        ? pendingCheckout.itemPrice
+        : '',
+    }
+  : null;
+const initialPurchaseItem = paymentPreview ? paymentPreviewItem : restoredPurchaseItem;
 
 interface BookingContextType {
   bookingOpen: boolean;
@@ -60,8 +103,10 @@ export function useBooking() {
 
 export function BookingProvider({ children }: { children: ReactNode }) {
   const [bookingOpen, setBookingOpen] = useState(false);
-  const [purchaseOpen, setPurchaseOpen] = useState(false);
-  const [purchaseItem, setPurchaseItem] = useState<PurchaseItem | null>(null);
+  const [purchaseOpen, setPurchaseOpen] = useState(Boolean(initialPurchaseItem));
+  const [purchaseItem, setPurchaseItem] = useState<PurchaseItem | null>(
+    initialPurchaseItem
+  );
   const [bathDetailOpen, setBathDetailOpen] = useState(false);
   const [selectedBath, setSelectedBath] = useState<BathType | null>(null);
   const [whatToBringOpen, setWhatToBringOpen] = useState(false);

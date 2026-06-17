@@ -21,26 +21,22 @@ import Container from '@/components/ui/Container';
 import Card from '@/components/ui/Card';
 import TicketButton from '@/components/ui/TicketButton';
 import { useBooking } from '@/context/BookingContext';
-import { usePageContent } from '@/hooks/useWordPressData';
-import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
+import { useFamilyContent } from '@/hooks/useWordPressData';
+import type { WPFamilyContent, WPFamilyService } from '@/api/wordpress';
 
-interface FamilyService {
-  id: string;
-  icon: typeof Waves;
-  title: string;
-  description: string;
-  features: string[];
-  image: string;
-  link?: string;
-  linkText?: string;
-  badge?: string;
-  price?: string;
-}
+const familyIconMap = {
+  waves: Waves,
+  graduation: GraduationCap,
+  thermometer: Thermometer,
+  heart: Heart,
+  party: PartyPopper,
+  sparkles: Sparkles,
+};
 
-const familyServices: FamilyService[] = [
+const fallbackFamilyServices: WPFamilyService[] = [
   {
     id: 'kids-pool',
-    icon: Waves,
+    icon: 'waves',
     title: 'Детский бассейн',
     description:
       'Безопасный тёплый бассейн с комфортной глубиной для детей. Зона джакузи с гидромассажем для малышей и родителей.',
@@ -52,10 +48,11 @@ const familyServices: FamilyService[] = [
     ],
     image: '/images/complex/pool.webp',
     badge: 'Включено',
+    visible: true,
   },
   {
     id: 'swimming-school',
-    icon: GraduationCap,
+    icon: 'graduation',
     title: 'Школа плавания',
     description:
       'Обучение плаванию для детей от 6 до 12 лет в тёплом термальном бассейне. Мини-группы 4–6 человек с индивидуальным подходом.',
@@ -69,10 +66,11 @@ const familyServices: FamilyService[] = [
     link: '/swimming-school',
     linkText: 'Подробнее о школе',
     price: 'от 1 800 ₽',
+    visible: true,
   },
   {
     id: 'kids-steam',
-    icon: Thermometer,
+    icon: 'thermometer',
     title: 'Детские парения',
     description:
       'Мягкие щадящие парения для детей с пониженной температурой. Банщики работают деликатно, учитывая особенности детского организма.',
@@ -86,10 +84,11 @@ const familyServices: FamilyService[] = [
     link: '/services',
     linkText: 'Все парения',
     price: 'от 1 200 ₽',
+    visible: true,
   },
   {
     id: 'kids-massage',
-    icon: Heart,
+    icon: 'heart',
     title: 'Детский массаж',
     description:
       'Нежный расслабляющий массаж для детей от 5 лет. Снимает напряжение, улучшает сон и общее самочувствие ребёнка.',
@@ -103,10 +102,11 @@ const familyServices: FamilyService[] = [
     link: '/services',
     linkText: 'Все SPA-услуги',
     price: '1 900 ₽',
+    visible: true,
   },
   {
     id: 'animation',
-    icon: PartyPopper,
+    icon: 'party',
     title: 'Детская анимация',
     description:
       'Профессиональные аниматоры проводят весёлые игры и мастер-классы для детей. Родители могут отдохнуть, пока дети развлекаются.',
@@ -120,10 +120,11 @@ const familyServices: FamilyService[] = [
     link: '/schedule',
     linkText: 'Смотреть расписание',
     badge: 'Бесплатно',
+    visible: true,
   },
   {
     id: 'aqua-aerobics',
-    icon: Sparkles,
+    icon: 'sparkles',
     title: 'Аквааэробика',
     description:
       'Групповые занятия в бассейне для всей семьи. Весело и полезно — фитнес в воде подходит для любого возраста и уровня подготовки.',
@@ -137,6 +138,7 @@ const familyServices: FamilyService[] = [
     link: '/schedule',
     linkText: 'Смотреть расписание',
     badge: 'Бесплатно',
+    visible: true,
   },
 ];
 
@@ -148,8 +150,94 @@ const safetyRules = [
   'Нарукавники для не умеющих плавать',
 ];
 
-function ServiceCard({ service }: { service: FamilyService }) {
+interface FamilyPageContentView {
+  pageTitle: string;
+  metaDescription: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  heroImage: string;
+  intro: {
+    title: string;
+    text: string;
+  };
+  services: {
+    title: string;
+    subtitle: string;
+    items: WPFamilyService[];
+  };
+  schedule: {
+    title: string;
+    text: string;
+    buttonText: string;
+    link: string;
+  };
+  safety: {
+    title: string;
+    subtitle: string;
+    rules: string[];
+    linkText: string;
+    link: string;
+  };
+  cta: {
+    title: string;
+    text: string;
+    primaryButton: string;
+    secondaryButton: string;
+    secondaryLink: string;
+    phoneLabel: string;
+    phone: string;
+  };
+}
+
+function mergeFamilyContent(content: WPFamilyContent): FamilyPageContentView {
+  return {
+    pageTitle: content.pageTitle || 'Семейный отдых',
+    metaDescription: content.metaDescription || 'Термбург для всей семьи — детский бассейн, школа плавания, анимация и мягкие парения для детей.',
+    heroTitle: content.heroTitle || 'Семейный отдых',
+    heroSubtitle: content.heroSubtitle || 'Термбург для всей семьи — здесь рады и взрослым, и детям',
+    heroImage: content.heroImage || '/images/heroes/family.webp',
+    intro: {
+      title: content.intro?.title || 'Отдых для всей семьи',
+      text: content.intro?.text || 'Термбург — это место, где каждый член семьи найдёт занятие по душе. Пока родители расслабляются в парных и SPA, дети весело проводят время в бассейне, на занятиях с аниматорами или учатся плавать в нашей школе.',
+    },
+    services: {
+      title: content.services?.title || 'Для детей и родителей',
+      subtitle: content.services?.subtitle || 'Всё, что нужно для идеального семейного дня',
+      items: content.services?.items?.length ? content.services.items : fallbackFamilyServices,
+    },
+    schedule: {
+      title: content.schedule?.title || 'Расписание детских мероприятий',
+      text: content.schedule?.text || 'Смотрите актуальное расписание аквааэробики, анимации и других активностей для детей',
+      buttonText: content.schedule?.buttonText || 'Открыть расписание',
+      link: content.schedule?.link || '/schedule',
+    },
+    safety: {
+      title: content.safety?.title || 'Правила безопасности',
+      subtitle: content.safety?.subtitle || 'Для комфортного отдыха с детьми',
+      rules: content.safety?.rules?.length ? content.safety.rules : safetyRules,
+      linkText: content.safety?.linkText || 'Полные правила посещения',
+      link: content.safety?.link || '/rules',
+    },
+    cta: {
+      title: content.cta?.title || 'Подарите семье день отдыха',
+      text: content.cta?.text || 'Забронируйте посещение для всей семьи и проведите незабываемый день в Термбурге',
+      primaryButton: content.cta?.primaryButton || 'Купить посещение',
+      secondaryButton: content.cta?.secondaryButton || 'Смотреть цены',
+      secondaryLink: content.cta?.secondaryLink || '/pricing',
+      phoneLabel: content.cta?.phoneLabel || 'Вопросы? Звоните:',
+      phone: content.cta?.phone || '+7 (909) 167-47-46',
+    },
+  };
+}
+
+function phoneHref(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  return digits ? `tel:+${digits}` : '';
+}
+
+function ServiceCard({ service }: { service: WPFamilyService }) {
   const { openBooking } = useBooking();
+  const Icon = familyIconMap[service.icon as keyof typeof familyIconMap] || Waves;
 
   return (
     <Card className="p-0 overflow-hidden flex flex-col h-full">
@@ -170,7 +258,7 @@ function ServiceCard({ service }: { service: FamilyService }) {
       </div>
       <div className="p-5 flex flex-col flex-1">
         <div className="flex items-center gap-2 mb-2">
-          <service.icon className="w-5 h-5 text-primary" />
+          <Icon className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-bold text-text-primary">{service.title}</h3>
         </div>
         <p className="text-sm text-text-secondary mb-4 flex-1">{service.description}</p>
@@ -193,7 +281,7 @@ function ServiceCard({ service }: { service: FamilyService }) {
               to={service.link}
               className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
-              {service.linkText} <ChevronRight className="w-4 h-4" />
+              {service.linkText || 'Подробнее'} <ChevronRight className="w-4 h-4" />
             </Link>
           ) : (
             <button
@@ -211,23 +299,21 @@ function ServiceCard({ service }: { service: FamilyService }) {
 }
 
 export default function FamilyPage() {
-  // WP-редактируемый контент из ACF (см. WP-админ → Контент страниц).
-  // Если в админке для slug «family» добавлены блоки — они показываются после PageHero.
-  const { data: pageContent } = usePageContent('family');
-
+  const { data: familyContent } = useFamilyContent();
+  const content = mergeFamilyContent(familyContent);
   const { openBooking } = useBooking();
+  const ctaPhoneHref = phoneHref(content.cta.phone);
 
   return (
     <PageLayout
-      title="Семейный отдых"
-      description="Термбург для всей семьи — детский бассейн, школа плавания, анимация и мягкие парения для детей."
+      title={content.pageTitle}
+      description={content.metaDescription}
     >
       <PageHero
-        title="Семейный отдых"
-        subtitle="Термбург для всей семьи — здесь рады и взрослым, и детям"
-        backgroundImage="/images/heroes/family.webp"
+        title={content.heroTitle}
+        subtitle={content.heroSubtitle}
+        backgroundImage={content.heroImage}
       />
-      {pageContent?.blocks?.length > 0 && <WPContentBlocks blocks={pageContent.blocks} />}
 
       {/* Intro */}
       <Section>
@@ -237,12 +323,10 @@ export default function FamilyPage() {
             <Users className="h-8 w-8 text-primary" />
           </div>
           <h2 className="text-2xl md:text-3xl font-bold text-text-primary mb-4">
-            Отдых для всей семьи
+            {content.intro.title}
           </h2>
           <p className="text-lg text-text-secondary leading-relaxed">
-            Термбург — это место, где каждый член семьи найдёт занятие по душе.
-            Пока родители расслабляются в парных и SPA, дети весело проводят время
-            в бассейне, на занятиях с аниматорами или учатся плавать в нашей школе.
+            {content.intro.text}
           </p>
         </div>
       </Section>
@@ -250,11 +334,11 @@ export default function FamilyPage() {
       {/* Services grid */}
       <Section
         warm
-        title="Для детей и родителей"
-        subtitle="Всё, что нужно для идеального семейного дня"
+        title={content.services.title}
+        subtitle={content.services.subtitle}
       >
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {familyServices.map((service) => (
+          {content.services.items.filter((service) => service.visible !== false).map((service) => (
             <ServiceCard key={service.id} service={service} />
           ))}
         </div>
@@ -269,17 +353,17 @@ export default function FamilyPage() {
             </div>
             <div className="flex-1 text-center md:text-left">
               <h3 className="text-xl font-bold text-text-primary mb-2">
-                Расписание детских мероприятий
+                {content.schedule.title}
               </h3>
               <p className="text-text-secondary mb-4">
-                Смотрите актуальное расписание аквааэробики, анимации и других активностей для детей
+                {content.schedule.text}
               </p>
               <Link
-                to="/schedule"
+                to={content.schedule.link}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-light transition-colors"
               >
                 <Clock className="w-4 h-4" />
-                Открыть расписание
+                {content.schedule.buttonText}
               </Link>
             </div>
           </div>
@@ -287,9 +371,9 @@ export default function FamilyPage() {
       </Section>
 
       {/* Safety rules */}
-      <Section warm title="Правила безопасности" subtitle="Для комфортного отдыха с детьми">
+      <Section warm title={content.safety.title} subtitle={content.safety.subtitle}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
-          {safetyRules.map((rule) => (
+          {content.safety.rules.map((rule) => (
             <div
               key={rule}
               className="flex items-center gap-3 rounded-xl bg-surface p-4 border border-border/50"
@@ -301,10 +385,10 @@ export default function FamilyPage() {
         </div>
         <div className="text-center mt-6">
           <Link
-            to="/rules"
+            to={content.safety.link}
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
           >
-            Полные правила посещения <ChevronRight className="w-4 h-4" />
+            {content.safety.linkText} <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
       </Section>
@@ -318,28 +402,33 @@ export default function FamilyPage() {
             <Heart className="h-8 w-8 text-primary" />
           </div>
           <h2 className="mb-4 font-heading text-2xl font-bold text-white md:text-3xl">
-            Подарите семье день отдыха
+            {content.cta.title}
           </h2>
           <p className="mx-auto mb-8 max-w-xl text-white/70">
-            Забронируйте посещение для всей семьи и проведите незабываемый день в Термбурге
+            {content.cta.text}
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <TicketButton onClick={openBooking}>Купить посещение</TicketButton>
+            <TicketButton onClick={openBooking}>{content.cta.primaryButton}</TicketButton>
             <Link
-              to="/pricing"
+              to={content.cta.secondaryLink}
               className="inline-flex items-center gap-2 rounded-xl border-2 border-white/30 bg-white/10 px-6 py-3 font-semibold text-white hover:bg-white/20 transition-colors"
             >
-              Смотреть цены
+              {content.cta.secondaryButton}
             </Link>
           </div>
           <p className="mt-4 text-sm text-white/50">
-            Вопросы? Звоните:{' '}
-            <a href="tel:+79091674746" className="text-primary hover:underline">
-              +7 (909) 167-47-46
-            </a>
+            {content.cta.phoneLabel}{' '}
+            {ctaPhoneHref ? (
+              <a href={ctaPhoneHref} className="text-primary hover:underline">
+                {content.cta.phone}
+              </a>
+            ) : (
+              <span className="text-primary">{content.cta.phone}</span>
+            )}
           </p>
         </Container>
       </section>
     </PageLayout>
   );
 }
+

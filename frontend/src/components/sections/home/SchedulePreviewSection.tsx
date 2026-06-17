@@ -10,13 +10,27 @@ function getCurrentDayName(): string {
   return days[new Date().getDay()];
 }
 
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function isSanitaryScheduleEvent(event: { type?: string; closed?: boolean; sanitaryDay?: boolean }): boolean {
+  return event.type === 'closed' || Boolean(event.closed) || Boolean(event.sanitaryDay);
+}
+
 const SchedulePreviewSection = memo(function SchedulePreviewSection() {
   const { openPurchase } = useBooking();
   const navigate = useNavigate();
-  const { data: wpSchedule } = useSchedule();
+  const { data: wpSchedule, loading } = useSchedule();
   const scheduleEvents = mapScheduleData(wpSchedule);
   const todayName = getCurrentDayName();
-  const previewEvents = scheduleEvents.filter((e) => Array.isArray(e.day) && e.day.includes(todayName));
+  const today = formatDateKey(new Date());
+  const todayEvents = scheduleEvents.filter((e) => e.date ? e.date === today : Array.isArray(e.day) && e.day.includes(todayName));
+  const sanitaryEvent = todayEvents.find(isSanitaryScheduleEvent);
+  const previewEvents = todayEvents.filter((event) => !isSanitaryScheduleEvent(event));
 
   return (
     <div className="h-full flex flex-col overflow-hidden max-w-full">
@@ -24,9 +38,20 @@ const SchedulePreviewSection = memo(function SchedulePreviewSection() {
         Расписание на сегодня
       </h3>
       <div className="space-y-2.5 flex-1">
-        {previewEvents.map((event) => {
-          const isPaid = event.type === 'paid';
-          const isSpecial = event.type === 'special';
+        {loading ? (
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/60">
+            Загружаем расписание...
+          </div>
+        ) : sanitaryEvent ? (
+          <div className="rounded-xl border border-orange-400/40 bg-orange-500/10 p-4 text-sm leading-relaxed text-orange-100">
+            <p className="font-bold">Санитарный день</p>
+            <p className="mt-1 text-orange-100/80">{sanitaryEvent.description || sanitaryEvent.name}</p>
+          </div>
+        ) : previewEvents.length > 0 ? previewEvents.map((event) => {
+          const hasPrice = Number(event.price) > 0;
+          const isPaid = event.type === 'paid' || hasPrice;
+          const isSpecial = event.type === 'special' || Boolean(event.highlight);
+          const canPurchase = hasPrice;
           return (
             <div
               key={event.id}
@@ -36,8 +61,20 @@ const SchedulePreviewSection = memo(function SchedulePreviewSection() {
                   : 'bg-white/5 border border-white/10 hover:border-primary/40 hover:bg-white/10'
               }`}
               onClick={() => {
-                if (isPaid && event.price) {
-                  openPurchase({ name: event.name, price: `${event.price} \u20BD` });
+                if (canPurchase) {
+                  openPurchase({
+                    name: event.name,
+                    price: `${event.price} \u20BD`,
+                    duration: event.duration,
+                    requiresVisitTicket: true,
+                    lineItems: [{
+                      name: event.name,
+                      price: Number(event.price) || 0,
+                      quantity: 1,
+                      duration: event.duration,
+                      kind: 'service',
+                    }],
+                  });
                 } else {
                   navigate('/schedule');
                 }
@@ -57,10 +94,14 @@ const SchedulePreviewSection = memo(function SchedulePreviewSection() {
                 </h4>
                 <p className="text-xs text-white/50">{event.duration}</p>
               </div>
-              {isPaid && event.price ? (
+              {canPurchase ? (
                 <span className="flex items-center gap-1 text-sm font-bold text-primary flex-shrink-0">
                   {event.price} &#8381;
                   <ChevronRight className="w-3.5 h-3.5 opacity-50" />
+                </span>
+              ) : isPaid ? (
+                <span className="text-xs text-white/40 font-medium flex-shrink-0">
+                  Скоро
                 </span>
               ) : (
                 <span className="text-xs text-emerald-400 font-medium flex-shrink-0">
@@ -69,7 +110,11 @@ const SchedulePreviewSection = memo(function SchedulePreviewSection() {
               )}
             </div>
           );
-        })}
+        }) : (
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm leading-relaxed text-white/70">
+            Расписание появится позже. Мы готовим актуальную программу мероприятий и опубликуем ее здесь.
+          </div>
+        )}
       </div>
 
       <div className="mt-5 text-center">

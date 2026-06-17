@@ -1,14 +1,22 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { X, Minus, Plus, Phone, CheckCircle, ChevronDown, CheckCircle2, Info, Ticket } from 'lucide-react';
-import { useBooking } from '@/context/BookingContext';
+import { X, Minus, Plus, Phone, CheckCircle, ChevronDown, CheckCircle2, Info, Ticket, Clock } from 'lucide-react';
+import { useBooking, type CheckoutLineItem } from '@/context/BookingContext';
 import CertificateConfigurator from '@/components/shared/CertificateConfigurator';
 import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, subscriptions as localSubscriptions, type PricingSlot, type Subscription } from '@/data/pricing';
 import { steamServices as localSteamServices, massageServices as localMassageServices, spaServices as localSpaServices, type ServiceItem } from '@/data/services';
 import { getApiUrl } from '@/api/wordpress';
 import { wpServiceItems } from '@/utils/wpServices';
-import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions } from '@/utils/pricingTariffs';
+import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions, tariffUsesFridayWeekendAllDay } from '@/utils/pricingTariffs';
+import { markPendingCheckoutConfirmed, savePendingCheckout } from '@/utils/paymentReturn';
+import { buildServiceBookingFallbackSlots, formatServiceBookingRange, getServiceBookingMinDate, getServiceReservedHours, normalizeServiceBookingSection, normalizeServiceBookingSlots, type ServiceBookingSlot } from '@/utils/serviceBooking';
 
-type BookingType = 'steaming' | 'massage' | 'spa' | 'visit' | 'certificate' | 'subscription';
+type BookingType = string;
+
+interface ModalServiceCategory {
+  id: string;
+  title: string;
+  items: ServiceItem[];
+}
 
 const localCertImages = [
   { id: 'pool', src: '/images/complex/pool.webp', label: 'Бассейн' },
@@ -28,6 +36,7 @@ function normalizePricingSlots(slots: PricingSlot[] | undefined): PricingSlot[] 
     id: String(slot.id),
     adultPrice: Number(slot.adultPrice) || 0,
     childPrice: Number(slot.childPrice) || 0,
+    fridayWeekendAllDay: Boolean(slot.fridayWeekendAllDay),
   }));
 }
 
@@ -40,6 +49,41 @@ function normalizeSubscriptions(items: Subscription[] | undefined): Subscription
     adultPrice: Number(item.adultPrice) || 0,
     discount: Number(item.discount) || 0,
   }));
+}
+
+function normalizeModalServiceCategories(value: unknown): ModalServiceCategory[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.map((category: any, categoryIndex) => ({
+    id: `additional-service-${category.id || categoryIndex + 1}`,
+    title: String(category.title || ''),
+    items: Array.isArray(category.items)
+      ? category.items.map((item: any, itemIndex: number) => ({
+          id: String(item.id || `${categoryIndex + 1}-${itemIndex + 1}`),
+          name: String(item.name || ''),
+          duration: String(item.duration || ''),
+          price: Number(item.price) || 0,
+          description: String(item.description || ''),
+        })).filter((item: ServiceItem) => item.name && item.price > 0)
+      : [],
+  })).filter((category) => category.title && category.items.length > 0);
+}
+
+function makeCatalogServiceCategories(
+  steamServices: ServiceItem[],
+  massageServices: ServiceItem[],
+  spaServices: ServiceItem[],
+): ModalServiceCategory[] {
+  return [
+    { id: 'catalog-steam', title: 'Парения', items: steamServices },
+    { id: 'catalog-massage', title: 'Массаж', items: massageServices },
+    { id: 'catalog-spa', title: 'SPA-процедуры', items: spaServices },
+  ].filter((category) => category.items.length > 0);
+}
+
+function ticketLineName(label: string, type: 'adult' | 'child') {
+  const suffix = type === 'adult' ? 'взрослый' : 'детский';
+  return `${label || 'Входной билет'} ${suffix}`;
 }
 
 function formatPhone(value: string): string {
@@ -130,9 +174,20 @@ export default function BookingModal() {
   );
   const subscriptions: Subscription[] = hasWpPricing ? normalizeSubscriptions(wpPricing.subscriptions) : localSubscriptions;
   const modalText = wpPricing?.pricingContent?.bookingModal ?? {};
+  const additionalServiceCategories = useMemo(
+    () => normalizeModalServiceCategories(modalText.additionalServices),
+    [modalText.additionalServices]
+  );
   const steamServices: ServiceItem[] = wpServiceItems(wpServices, 'steam', localSteamServices);
   const massageServices: ServiceItem[] = wpServiceItems(wpServices, 'massage', localMassageServices);
   const spaServices: ServiceItem[] = wpServiceItems(wpServices, 'spa', localSpaServices);
+  const catalogServiceCategories = useMemo(
+    () => makeCatalogServiceCategories(steamServices, massageServices, spaServices),
+    [steamServices, massageServices, spaServices]
+  );
+  const modalServiceCategories = catalogServiceCategories.length > 0
+    ? catalogServiceCategories
+    : additionalServiceCategories;
   const tariffOptions = useMemo(
     () => getTariffOptions(weekdayPricing, weekendPricing),
     [weekdayPricing, weekendPricing]
@@ -141,16 +196,15 @@ export default function BookingModal() {
   const hasVisitTariffs = tariffOptions.length > 0;
   const bookingTypeOptions = useMemo<Array<{ id: BookingType; label: string }>>(() => ([
     { id: 'visit', label: modalText.visitLabel || 'Посещение' },
-    { id: 'steaming', label: modalText.steamingLabel || 'Парение' },
-    { id: 'massage', label: modalText.massageLabel || 'Массаж' },
-    { id: 'spa', label: modalText.spaLabel || 'Спа' },
+    ...modalServiceCategories.map((category) => ({ id: category.id, label: category.title })),
     { id: 'certificate', label: modalText.certificateLabel || 'Сертификат' },
     { id: 'subscription', label: modalText.subscriptionLabel || 'Абонемент' },
   ] as Array<{ id: BookingType; label: string }>)
     .filter((opt) => opt.id !== 'visit' || hasVisitTariffs)
     .filter((opt) => opt.id !== 'subscription' || subscriptions.length > 0),
-  [modalText, hasVisitTariffs, subscriptions.length]);
+  [modalServiceCategories, modalText, hasVisitTariffs, subscriptions.length]);
   const [step, setStep] = useState<'form' | 'success'>('form');
+  const [checkoutError, setCheckoutError] = useState('');
   const [bookingType, setBookingType] = useState<BookingType>('visit');
   const [date, setDate] = useState('');
   const [tariff, setTariff] = useState(defaultTariffId);
@@ -162,6 +216,7 @@ export default function BookingModal() {
   const [selectedSteam, setSelectedSteam] = useState('');
   const [selectedMassage, setSelectedMassage] = useState('');
   const [selectedSpa, setSelectedSpa] = useState('');
+  const [selectedAdditionalService, setSelectedAdditionalService] = useState('');
   const [certImage, setCertImage] = useState(certificateImages[0].id);
   const [certAmount, setCertAmount] = useState<number | ''>('');
   const [certWish, setCertWish] = useState('');
@@ -172,6 +227,10 @@ export default function BookingModal() {
   const [addVisit, setAddVisit] = useState(false);
   const [visitTariff, setVisitTariff] = useState(defaultTariffId);
   const [visitDate, setVisitDate] = useState('');
+  const [serviceHour, setServiceHour] = useState('');
+  const [serviceSlots, setServiceSlots] = useState<ServiceBookingSlot[]>([]);
+  const [serviceSlotsLoading, setServiceSlotsLoading] = useState(false);
+  const [serviceSlotsError, setServiceSlotsError] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -207,6 +266,25 @@ export default function BookingModal() {
     }
   }, [selectedSub, subscriptions]);
 
+  const activeAdditionalCategory = useMemo(
+    () => modalServiceCategories.find((category) => category.id === bookingType) ?? null,
+    [modalServiceCategories, bookingType]
+  );
+  const activeAdditionalService = useMemo(
+    () => activeAdditionalCategory?.items.find((service) => service.id === selectedAdditionalService) ?? null,
+    [activeAdditionalCategory, selectedAdditionalService]
+  );
+
+  useEffect(() => {
+    if (!activeAdditionalCategory) return;
+    if (!activeAdditionalCategory.items.some((service) => service.id === selectedAdditionalService)) {
+      setSelectedAdditionalService(activeAdditionalCategory.items[0]?.id ?? '');
+    }
+    if (hasVisitTariffs) {
+      setAddVisit(true);
+    }
+  }, [activeAdditionalCategory, hasVisitTariffs, selectedAdditionalService]);
+
   const whatToBringItems = [
     'Полотенце',
     'Купальник',
@@ -217,15 +295,29 @@ export default function BookingModal() {
   ];
 
   // Расчёт стоимости посещения для услуг
+  const mainVisitUsesFridayWeekendAllDay = tariffUsesFridayWeekendAllDay(tariffOptions, tariff, weekdayPricing, weekendPricing);
+  const additionalVisitUsesFridayWeekendAllDay = tariffUsesFridayWeekendAllDay(tariffOptions, visitTariff, weekdayPricing, weekendPricing);
+
   const visitPrice = useMemo(() => {
     if (!addVisit || !visitDate) return 0;
     const useWeekendPricing = isSpecialWeekendDate(visitDate, specialWeekendDates)
       || isWeekend(visitDate)
-      || (isFriday(visitDate) && fridayTime === 'after18');
+      || (isFriday(visitDate) && (additionalVisitUsesFridayWeekendAllDay || fridayTime === 'after18'));
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     const slot = findPricingSlot(pricing, visitTariff, tariffOptions);
     return slot?.adultPrice ?? 0;
-  }, [addVisit, visitDate, visitTariff, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+  }, [addVisit, visitDate, visitTariff, additionalVisitUsesFridayWeekendAllDay, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+
+  const selectedVisitSlot = useMemo(() => {
+    if (!date) return null;
+    const useWeekendPricing = isSpecialWeekendDate(date, specialWeekendDates)
+      || isWeekend(date)
+      || (isFriday(date) && (mainVisitUsesFridayWeekendAllDay || fridayTime === 'after18'));
+    const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
+    return findPricingSlot(pricing, tariff, tariffOptions);
+  }, [date, tariff, mainVisitUsesFridayWeekendAllDay, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+  const selectedVisitLabel = getTariffLabel(tariffOptions, tariff) || tariff || 'Входной билет';
+  const additionalVisitLabel = getTariffLabel(tariffOptions, visitTariff) || visitTariff || 'Входной билет';
 
   const selectedSteamService = useMemo(
     () => steamServices.find((s) => s.id === selectedSteam) ?? null,
@@ -239,6 +331,121 @@ export default function BookingModal() {
     () => spaServices.find((s) => s.id === selectedSpa) ?? null,
     [spaServices, selectedSpa]
   );
+  const selectedServiceItem = useMemo(
+    () => activeAdditionalService
+      ?? (bookingType === 'steaming' ? selectedSteamService : null)
+      ?? (bookingType === 'massage' ? selectedMassageService : null)
+      ?? (bookingType === 'spa' ? selectedSpaService : null),
+    [activeAdditionalService, bookingType, selectedSteamService, selectedMassageService, selectedSpaService]
+  );
+  const serviceRequiresVisitTicket = Boolean(
+    selectedServiceItem
+      && (activeAdditionalCategory || bookingType === 'steaming' || bookingType === 'massage' || bookingType === 'spa')
+  );
+  const requiresServiceBooking = serviceRequiresVisitTicket && Boolean(selectedServiceItem);
+  const serviceBookingSection = useMemo(() => {
+    if (bookingType === 'massage') return 'massage';
+    if (bookingType === 'spa') return 'spa';
+    if (bookingType === 'steaming') return 'steaming';
+    return normalizeServiceBookingSection(activeAdditionalCategory?.title, selectedServiceItem?.name);
+  }, [activeAdditionalCategory?.title, bookingType, selectedServiceItem?.name]);
+  const serviceVisitMinDate = requiresServiceBooking ? getServiceBookingMinDate() : getToday();
+  const serviceBookingDate = visitDate;
+  const serviceReservedHours = getServiceReservedHours(selectedServiceItem?.duration);
+  const selectedServiceSlot = useMemo(
+    () => serviceSlots.find((slot) => String(slot.hour) === serviceHour) ?? null,
+    [serviceSlots, serviceHour]
+  );
+  const serviceBookingBlocked = requiresServiceBooking
+    && (!serviceBookingDate || !serviceHour || serviceSlotsLoading || Boolean(serviceSlotsError) || !selectedServiceSlot?.available);
+  const selectedSubscription = useMemo(
+    () => subscriptions.find((s) => s.id === selectedSub) ?? null,
+    [subscriptions, selectedSub]
+  );
+
+  useEffect(() => {
+    if (serviceRequiresVisitTicket && hasVisitTariffs && !addVisit) {
+      setAddVisit(true);
+    }
+  }, [addVisit, hasVisitTariffs, serviceRequiresVisitTicket]);
+
+  useEffect(() => {
+    if (requiresServiceBooking && visitDate && visitDate < serviceVisitMinDate) {
+      setVisitDate('');
+      setServiceHour('');
+    }
+  }, [requiresServiceBooking, serviceVisitMinDate, visitDate]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!requiresServiceBooking || !serviceBookingDate) {
+      setServiceSlots([]);
+      setServiceHour('');
+      setServiceSlotsError('');
+      setServiceSlotsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setServiceSlotsLoading(true);
+    setServiceSlotsError('');
+
+    const params = new URLSearchParams({
+      date: serviceBookingDate,
+      hours: String(serviceReservedHours),
+      section: serviceBookingSection,
+    });
+
+    fetch(getApiUrl(`/checkout/service-slots?${params.toString()}`))
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || 'Не удалось загрузить часы услуги');
+        }
+        return normalizeServiceBookingSlots(result.slots);
+      })
+      .then((slots) => {
+        if (cancelled) return;
+        const firstAvailable = slots.find((slot) => slot.available) ?? null;
+        setServiceSlots(slots);
+        setServiceHour((current) => (
+          slots.some((slot) => String(slot.hour) === current && slot.available)
+            ? current
+            : (firstAvailable ? String(firstAvailable.hour) : '')
+        ));
+        setServiceSlotsError(firstAvailable ? '' : 'На эту дату нет свободного времени для выбранной услуги');
+      })
+      .catch((slotError) => {
+        if (cancelled) return;
+        if (import.meta.env.DEV) {
+          const slots = buildServiceBookingFallbackSlots(serviceReservedHours, serviceBookingDate);
+          const firstAvailable = slots.find((slot) => slot.available) ?? null;
+          setServiceSlots(slots);
+          setServiceHour((current) => (
+            slots.some((slot) => String(slot.hour) === current && slot.available)
+              ? current
+              : (firstAvailable ? String(firstAvailable.hour) : '')
+          ));
+          setServiceSlotsError(firstAvailable ? '' : 'На эту дату нет свободного времени для выбранной услуги');
+          console.warn('Service slots API is unavailable; using dev-only fallback slots.', slotError);
+          return;
+        }
+        setServiceSlots([]);
+        setServiceHour('');
+        setServiceSlotsError(slotError instanceof Error ? slotError.message : 'Не удалось загрузить часы услуги');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setServiceSlotsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requiresServiceBooking, serviceBookingDate, serviceReservedHours, serviceBookingSection]);
 
   const getServiceOrderName = (service: ServiceItem | null, fallback: string) => {
     if (!service) return fallback;
@@ -250,8 +457,10 @@ export default function BookingModal() {
       return typeof certAmount === 'number' ? certAmount : 0;
     }
     if (bookingType === 'subscription') {
-      const sub = subscriptions.find((s) => s.id === selectedSub);
-      return sub?.adultPrice ?? 0;
+      return selectedSubscription?.adultPrice ?? 0;
+    }
+    if (activeAdditionalCategory) {
+      return (activeAdditionalService?.price ?? 0) + visitPrice;
     }
     if (bookingType === 'steaming') {
       return (selectedSteamService?.price ?? 0) + visitPrice;
@@ -262,20 +471,142 @@ export default function BookingModal() {
     if (bookingType === 'spa') {
       return (selectedSpaService?.price ?? 0) + visitPrice;
     }
-    if (!date) return 0;
-    // Пятница после 18:00 = тариф выходных
-    const useWeekendPricing = isSpecialWeekendDate(date, specialWeekendDates)
-      || isWeekend(date)
-      || (isFriday(date) && fridayTime === 'after18');
-    const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
-    const slot = findPricingSlot(pricing, tariff, tariffOptions);
-    if (!slot) return 0;
-    return slot.adultPrice * adults + slot.childPrice * children;
-  }, [bookingType, date, tariff, adults, children, selectedSub, fridayTime, selectedSteamService, selectedMassageService, selectedSpaService, certAmount, visitPrice, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+    if (!selectedVisitSlot) return 0;
+    return selectedVisitSlot.adultPrice * adults + selectedVisitSlot.childPrice * children;
+  }, [activeAdditionalCategory, activeAdditionalService, bookingType, adults, children, selectedSubscription, selectedSteamService, selectedMassageService, selectedSpaService, certAmount, visitPrice, selectedVisitSlot]);
+
+  const checkoutLineItems = useMemo<CheckoutLineItem[]>(() => {
+    const lines: CheckoutLineItem[] = [];
+
+    if (bookingType === 'visit' && selectedVisitSlot) {
+      if (adults > 0 && selectedVisitSlot.adultPrice > 0) {
+        lines.push({
+          name: ticketLineName(selectedVisitLabel, 'adult'),
+          price: selectedVisitSlot.adultPrice,
+          quantity: adults,
+          kind: 'adult_ticket',
+        });
+      }
+      if (children > 0 && selectedVisitSlot.childPrice > 0) {
+        lines.push({
+          name: ticketLineName(selectedVisitLabel, 'child'),
+          price: selectedVisitSlot.childPrice,
+          quantity: children,
+          kind: 'child_ticket',
+        });
+      }
+      return lines;
+    }
+
+    if (selectedServiceItem && selectedServiceItem.price > 0) {
+      lines.push({
+        name: selectedServiceItem.name,
+        price: selectedServiceItem.price,
+        quantity: 1,
+        duration: selectedServiceItem.duration,
+        ...(requiresServiceBooking && serviceHour ? {
+          serviceDate: serviceBookingDate,
+          serviceStartHour: Number(serviceHour),
+          reservedHours: serviceReservedHours,
+          serviceSection: serviceBookingSection,
+        } : {}),
+        kind: 'service',
+      });
+    } else if (bookingType === 'subscription' && selectedSubscription) {
+      lines.push({
+        name: `Абонемент «${selectedSubscription.name}»`,
+        price: selectedSubscription.adultPrice,
+        quantity: 1,
+        kind: 'subscription',
+      });
+    } else if (bookingType === 'certificate' && typeof certAmount === 'number') {
+      lines.push({
+        name: `Сертификат ${certAmount.toLocaleString('ru-RU')} ₽`,
+        price: certAmount,
+        quantity: 1,
+        kind: 'certificate',
+      });
+    }
+
+    if (addVisit && visitPrice > 0) {
+      lines.push({
+        name: ticketLineName(additionalVisitLabel, 'adult'),
+        price: visitPrice,
+        quantity: 1,
+        kind: 'visit_ticket',
+      });
+    }
+
+    return lines;
+  }, [bookingType, selectedVisitSlot, selectedVisitLabel, adults, children, selectedServiceItem, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, selectedSubscription, certAmount, addVisit, visitPrice, additionalVisitLabel]);
+
+  const renderServiceBookingTimePicker = () => {
+    if (!requiresServiceBooking || !serviceBookingDate) return null;
+
+    return (
+      <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-text-secondary">
+            <Clock className="h-3.5 w-3.5" />
+            Время услуги
+          </label>
+          <p className="text-xs text-text-secondary">
+            Бронь займет {serviceReservedHours} ч. по длительности услуги.
+          </p>
+        </div>
+
+        {serviceSlotsLoading && (
+          <p className="text-xs text-text-secondary">Загружаем свободные часы...</p>
+        )}
+
+        {serviceSlotsError && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+            {serviceSlotsError}
+          </p>
+        )}
+
+        {serviceSlots.length > 0 && (
+          <div className="grid grid-cols-3 gap-1.5">
+            {serviceSlots.map((slot) => {
+              const selected = String(slot.hour) === serviceHour;
+              return (
+                <button
+                  key={slot.hour}
+                  type="button"
+                  disabled={!slot.available || serviceSlotsLoading}
+                  onClick={() => setServiceHour(String(slot.hour))}
+                  className={`min-h-12 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                    selected
+                      ? 'border-primary bg-primary text-white'
+                      : slot.available
+                        ? 'border-border bg-background text-text-primary hover:border-primary/40'
+                        : 'border-border bg-background/60 text-text-secondary/50 cursor-not-allowed'
+                  }`}
+                >
+                  <span className="block">{slot.label}</span>
+                  <span className="block text-[10px] opacity-80">
+                    {slot.available ? formatServiceBookingRange(slot.hour, serviceReservedHours) : (slot.past ? 'Прошло' : 'Занято')}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCheckoutError('');
     try {
+      if (serviceBookingBlocked) {
+        throw new Error('Выберите свободное время услуги');
+      }
+      if (serviceRequiresVisitTicket && (!selectedServiceItem || !addVisit || !visitDate || visitPrice <= 0)) {
+        throw new Error('Для дополнительной услуги выберите тариф обязательного входного билета');
+      }
+      const orderName = bookingType === 'visit' ? `Входной билет (${getTariffLabel(tariffOptions, tariff) || tariff})` : activeAdditionalCategory ? getServiceOrderName(activeAdditionalService, selectedAdditionalService) : bookingType === 'steaming' ? getServiceOrderName(selectedSteamService, selectedSteam) : bookingType === 'massage' ? getServiceOrderName(selectedMassageService, selectedMassage) : bookingType === 'spa' ? getServiceOrderName(selectedSpaService, selectedSpa) : bookingType === 'certificate' ? `Сертификат ${certAmount} ₽` : `Абонемент`;
       const response = await fetch('/wp-json/termburg/v1/checkout/create', {
         method: 'POST',
         headers: {
@@ -283,25 +614,44 @@ export default function BookingModal() {
           ...(localStorage.getItem('termburg_token') ? { Authorization: `Bearer ${localStorage.getItem('termburg_token')}` } : {}),
         },
         body: JSON.stringify({
-          name: bookingType === 'visit' ? `Входной билет (${getTariffLabel(tariffOptions, tariff) || tariff})` : bookingType === 'steaming' ? getServiceOrderName(selectedSteamService, selectedSteam) : bookingType === 'massage' ? getServiceOrderName(selectedMassageService, selectedMassage) : bookingType === 'spa' ? getServiceOrderName(selectedSpaService, selectedSpa) : bookingType === 'certificate' ? `Сертификат ${certAmount} ₽` : `Абонемент`,
+          name: orderName,
           amount: total,
           quantity: adults + children || 1,
           email: email,
           phone: phone,
           customerName: name,
-          returnUrl: `${window.location.origin}/account?payment=success`,
+          requires_visit_ticket: serviceRequiresVisitTicket,
+          visit_ticket_amount: visitPrice,
+          visit_ticket_date: visitDate,
+          visit_ticket_tariff: visitTariff,
+          service_booking_date: requiresServiceBooking ? serviceBookingDate : undefined,
+          service_booking_start_hour: requiresServiceBooking ? Number(serviceHour) : undefined,
+          service_booking_hours: requiresServiceBooking ? serviceReservedHours : undefined,
+          service_booking_label: requiresServiceBooking ? (selectedServiceItem?.name || orderName) : undefined,
+          service_booking_section: requiresServiceBooking ? serviceBookingSection : undefined,
+          line_items: checkoutLineItems,
         }),
       });
       const order = await response.json();
       if (!response.ok) throw new Error(order.error || 'Ошибка');
+      savePendingCheckout({
+        orderId: String(order.orderId),
+        orderKey: String(order.orderKey || ''),
+        email,
+        name,
+        phone,
+        itemName: orderName,
+        itemPrice: `${total.toLocaleString('ru-RU')} ₽`,
+      });
       if (order.paymentUrl) {
         window.location.href = order.paymentUrl;
       } else {
+        markPendingCheckoutConfirmed();
         setStep('success');
       }
     } catch (err) {
       console.error('Checkout error:', err);
-      setStep('success');
+      setCheckoutError(err instanceof Error ? err.message : 'Не удалось оформить заказ');
     }
   };
 
@@ -320,15 +670,21 @@ export default function BookingModal() {
       setSelectedSteam('');
       setSelectedMassage('');
       setSelectedSpa('');
+      setSelectedAdditionalService('');
       setCertImage(certificateImages[0].id);
       setCertAmount('');
       setCertWish('');
       setSelectedSub(subscriptions[0]?.id ?? '');
+      setCheckoutError('');
       setShowWhatToBring(false);
       setFridayTime('before18');
       setAddVisit(false);
       setVisitTariff(defaultTariffId);
       setVisitDate('');
+      setServiceHour('');
+      setServiceSlots([]);
+      setServiceSlotsLoading(false);
+      setServiceSlotsError('');
     }, 300);
   }, [bookingTypeOptions, closeModal, defaultTariffId, subscriptions]);
 
@@ -419,7 +775,7 @@ export default function BookingModal() {
                   <input
                     type="date"
                     required
-                    min={getToday()}
+                    min={serviceVisitMinDate}
                     max={getMaxDate()}
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
@@ -430,7 +786,7 @@ export default function BookingModal() {
                       {isWeekend(date) ? 'Выходной день — тариф выходного дня' : 'Будний день'}
                     </p>
                   )}
-                  {date && isFriday(date) && !isSpecialWeekendDate(date, specialWeekendDates) && (
+                  {date && isFriday(date) && !isSpecialWeekendDate(date, specialWeekendDates) && !mainVisitUsesFridayWeekendAllDay && (
                     <div className="mt-3">
                       <p className="mb-2 text-xs text-text-secondary">Пятница — выберите время посещения:</p>
                       <div className="flex gap-2">
@@ -537,6 +893,68 @@ export default function BookingModal() {
               </>
             )}
 
+            {/* Дополнительные услуги из каталога модалки */}
+            {activeAdditionalCategory && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">Выберите услугу: {activeAdditionalCategory.title}</label>
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {activeAdditionalCategory.items.map((service) => (
+                    <button
+                      key={service.id}
+                      type="button"
+                      onClick={() => setSelectedAdditionalService(service.id)}
+                      className={`w-full rounded-xl px-4 py-3 text-left transition-colors ${
+                        selectedAdditionalService === service.id
+                          ? 'bg-background border-2 border-primary'
+                          : 'bg-surface border-2 border-transparent hover:bg-surface-warm'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-medium text-text-primary">{service.name}</p>
+                        <p className="flex-shrink-0 font-bold text-primary">{service.price.toLocaleString('ru-RU')} ₽</p>
+                      </div>
+                      <p className="text-xs text-text-secondary mt-0.5">{service.duration}{service.description ? ` · ${service.description}` : ''}</p>
+                    </button>
+                  ))}
+                </div>
+                {hasVisitTariffs && (
+                  <div className="mt-3 space-y-3">
+                    <label className="flex items-center gap-3 rounded-xl bg-amber-50 border border-amber-200/60 px-4 py-3">
+                      <input type="checkbox" checked disabled className="h-4 w-4 rounded border-amber-300 text-primary focus:ring-primary/30 disabled:opacity-100" />
+                      <div className="flex items-center gap-1.5">
+                        <Ticket className="w-4 h-4 text-amber-600" />
+                        <div>
+                          <span className="block text-sm font-semibold text-amber-800">Входной билет обязателен</span>
+                          <span className="block text-xs text-amber-700/80">Оплачивается отдельно. Можно выбрать тариф больше 1 часа.</span>
+                        </div>
+                      </div>
+                    </label>
+                    <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.dateLabel || 'Дата посещения'}</label>
+                        <input type="date" required min={serviceVisitMinDate} value={visitDate} onChange={(e) => setVisitDate(e.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none" />
+                        {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && !additionalVisitUsesFridayWeekendAllDay && (
+                          <div className="mt-2 flex gap-2">
+                            <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
+                            <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.tariffLabel || 'Тариф'}</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {tariffOptions.map((opt) => (
+                            <button key={opt.id} type="button" onClick={() => setVisitTariff(opt.id)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${visitTariff === opt.id ? 'bg-primary text-white' : 'bg-background text-text-secondary hover:bg-border'}`}>{opt.label}</button>
+                          ))}
+                        </div>
+                      </div>
+                      {visitDate && visitPrice > 0 && <p className="text-xs text-text-secondary">Входной билет: <strong className="text-primary">{visitPrice.toLocaleString('ru-RU')} ₽</strong></p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Выбор парения */}
             {bookingType === 'steaming' && (
               <div>
@@ -583,12 +1001,12 @@ export default function BookingModal() {
                         <input
                           type="date"
                           required
-                          min={getToday()}
+                          min={serviceVisitMinDate}
                           value={visitDate}
                           onChange={(e) => setVisitDate(e.target.value)}
                           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
                         />
-                        {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && (
+                        {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && !additionalVisitUsesFridayWeekendAllDay && (
                           <div className="mt-2 flex gap-2">
                             <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
                             <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
@@ -663,12 +1081,12 @@ export default function BookingModal() {
                         <input
                           type="date"
                           required
-                          min={getToday()}
+                          min={serviceVisitMinDate}
                           value={visitDate}
                           onChange={(e) => setVisitDate(e.target.value)}
                           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
                         />
-                        {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && (
+                        {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && !additionalVisitUsesFridayWeekendAllDay && (
                           <div className="mt-2 flex gap-2">
                             <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
                             <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
@@ -743,12 +1161,12 @@ export default function BookingModal() {
                         <input
                           type="date"
                           required
-                          min={getToday()}
+                          min={serviceVisitMinDate}
                           value={visitDate}
                           onChange={(e) => setVisitDate(e.target.value)}
                           className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
                         />
-                        {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && (
+                        {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && !additionalVisitUsesFridayWeekendAllDay && (
                           <div className="mt-2 flex gap-2">
                             <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
                             <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
@@ -778,6 +1196,8 @@ export default function BookingModal() {
             )}
 
             {/* Сертификат */}
+            {renderServiceBookingTimePicker()}
+
             {bookingType === 'certificate' && (
               <CertificateConfigurator
                 showDescription={false}
@@ -881,7 +1301,7 @@ export default function BookingModal() {
                 {bookingType === 'visit' && date && (
                   <p className="mt-1 text-xs text-text-secondary">
                     {adults} взр.{children > 0 ? ` + ${children} дет.` : ''} &middot;{' '}
-                    {isSpecialWeekendDate(date, specialWeekendDates) || isWeekend(date) || (isFriday(date) && fridayTime === 'after18') ? 'выходной' : 'будни'} &middot;{' '}
+                    {isSpecialWeekendDate(date, specialWeekendDates) || isWeekend(date) || (isFriday(date) && (mainVisitUsesFridayWeekendAllDay || fridayTime === 'after18')) ? 'выходной' : 'будни'} &middot;{' '}
                     {getTariffLabel(tariffOptions, tariff)}
                   </p>
                 )}
@@ -889,10 +1309,16 @@ export default function BookingModal() {
             )}
 
             {/* Submit */}
+            {checkoutError && (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                {checkoutError}
+              </p>
+            )}
             {bookingType !== 'certificate' && (
             <button
               type="submit"
-              className="w-full rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-primary-light active:brightness-90"
+              disabled={serviceBookingBlocked}
+              className="w-full rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-primary-light active:brightness-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {modalText.submitLabel || 'Оплатить мою порцию счастья'}
             </button>

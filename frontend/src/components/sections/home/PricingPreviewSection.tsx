@@ -7,6 +7,7 @@ import TicketButton from '@/components/ui/TicketButton';
 import CertificateConfigurator from '@/components/shared/CertificateConfigurator';
 import { useBooking } from '@/context/BookingContext';
 import { usePricing } from '@/hooks/useWordPressData';
+import { getTariffOptionId } from '@/utils/pricingTariffs';
 import {
   weekdayPricing,
   weekendPricing,
@@ -94,7 +95,14 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
                         className="flex items-center justify-between gap-3 px-6 py-3 cursor-pointer hover:bg-surface-warm transition-colors"
                         role="button"
                         tabIndex={0}
-                        onClick={() => openPurchase({ name: `${weekdayPurchasePrefix} — ${slot.name}`, price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽`, childPrice: `${slot.childPrice.toLocaleString('ru-RU')} ₽` })}
+                        onClick={() => openPurchase({
+                          name: `${weekdayPurchasePrefix} — ${slot.name}`,
+                          price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽`,
+                          childPrice: `${slot.childPrice.toLocaleString('ru-RU')} ₽`,
+                          tariffId: getTariffOptionId(slot),
+                          tariffLabel: slot.name,
+                          tariffPeriod: isSpecialWeekendToday ? 'weekend' : 'weekday',
+                        })}
                       >
                         <span className="min-w-0 text-text-primary break-words">{slot.name}</span>
                         <span className="flex-shrink-0 text-primary font-bold">{slot.adultPrice.toLocaleString('ru-RU')}₽</span>
@@ -116,7 +124,14 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
                         className="flex items-center justify-between gap-3 px-6 py-3 cursor-pointer hover:bg-accent/5 transition-colors"
                         role="button"
                         tabIndex={0}
-                        onClick={() => openPurchase({ name: `Выходные — ${slot.name}`, price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽`, childPrice: `${slot.childPrice.toLocaleString('ru-RU')} ₽` })}
+                        onClick={() => openPurchase({
+                          name: `Выходные — ${slot.name}`,
+                          price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽`,
+                          childPrice: `${slot.childPrice.toLocaleString('ru-RU')} ₽`,
+                          tariffId: getTariffOptionId(slot),
+                          tariffLabel: slot.name,
+                          tariffPeriod: 'weekend',
+                        })}
                       >
                         <span className="min-w-0 text-text-primary break-words">{slot.name}</span>
                         <span className="flex-shrink-0 text-primary font-bold">{slot.adultPrice.toLocaleString('ru-RU')}₽</span>

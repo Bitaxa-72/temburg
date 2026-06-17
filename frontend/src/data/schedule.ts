@@ -1,16 +1,19 @@
 export interface ScheduleEvent {
-  id: number;
+  id: number | string;
+  date?: string;
   name: string;
   time: string;
   duration: string;
   day: string[];
-  type: 'free' | 'paid' | 'special';
+  type: 'free' | 'paid' | 'special' | 'closed';
   description: string;
   instructor?: string;
   location?: string;
   price?: number;
   purchaseUrl?: string;
   highlight?: boolean;
+  closed?: boolean;
+  sanitaryDay?: boolean;
 }
 
 export const daysOfWeek: string[] = [

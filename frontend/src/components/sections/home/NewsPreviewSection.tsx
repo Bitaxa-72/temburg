@@ -94,16 +94,16 @@ export default function NewsPreviewSection() {
 
   return (
     <Section title="Новости и статьи" subtitle="Будьте в курсе событий Термбурга">
-      <div className="grid gap-8 md:grid-cols-2">
+      <div className="grid min-w-0 gap-8 md:grid-cols-2">
         {/* Left column - first 3 */}
-        <div>
+        <div className="min-w-0">
           <h3 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4">Последние новости</h3>
           <div className="space-y-3">
             {news.slice(0, 3).map((item) => (
               <Link
                 key={item.id}
                 to="/news"
-                className="flex items-center gap-4 rounded-xl bg-surface border border-border/50 p-3 hover:border-primary/20 transition-all group"
+                className="flex w-full min-w-0 max-w-full items-center gap-4 overflow-hidden rounded-xl bg-surface border border-border/50 p-3 hover:border-primary/20 transition-all group"
               >
                 <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
                   {item.image ? (
@@ -120,7 +120,7 @@ export default function NewsPreviewSection() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-text-primary truncate group-hover:text-primary transition-colors">
+                  <p className="block min-w-0 max-w-full truncate text-sm font-medium text-text-primary group-hover:text-primary transition-colors">
                     {item.title}
                   </p>
                   <span className="flex items-center gap-1 text-xs text-text-secondary mt-1">
@@ -142,14 +142,14 @@ export default function NewsPreviewSection() {
 
         {/* Right column - news 4-6 */}
         {news.length > 3 && (
-        <div>
+        <div className="min-w-0">
           <h3 className="text-sm font-bold text-text-secondary uppercase tracking-wider mb-4">&nbsp;</h3>
           <div className="space-y-3">
             {news.slice(3, 6).map((item) => (
               <Link
                 key={item.id}
                 to="/news"
-                className="flex items-center gap-4 rounded-xl bg-surface border border-border/50 p-3 hover:border-primary/20 transition-all group"
+                className="flex w-full min-w-0 max-w-full items-center gap-4 overflow-hidden rounded-xl bg-surface border border-border/50 p-3 hover:border-primary/20 transition-all group"
               >
                 <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
                   {item.image ? (
@@ -166,7 +166,7 @@ export default function NewsPreviewSection() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-text-primary truncate group-hover:text-primary transition-colors">
+                  <p className="block min-w-0 max-w-full truncate text-sm font-medium text-text-primary group-hover:text-primary transition-colors">
                     {item.title}
                   </p>
                   <span className="flex items-center gap-1 text-xs text-text-secondary mt-1">
