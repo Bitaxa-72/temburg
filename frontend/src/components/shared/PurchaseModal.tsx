@@ -3,6 +3,7 @@ import { X, CheckCircle, Phone, Users, Baby, Ticket, ChevronDown, Calendar, Cloc
 import { useBooking, type CheckoutLineItem } from '@/context/BookingContext';
 import { useAuth } from '@/context/AuthContext';
 import LegalConsents from '@/components/shared/LegalConsents';
+import PromoCodeField, { type PromoValidation } from '@/components/shared/PromoCodeField';
 import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, type PricingSlot } from '@/data/pricing';
 import { bookingsApi, paymentsApi, type ServiceType } from '@/services/api';
 import { getApiUrl } from '@/api/wordpress';
@@ -404,7 +405,7 @@ export default function PurchaseModal() {
         name: ticketLineName(requiredVisitTicketLabel, 'adult'),
         price: ticketPrice,
         quantity: 1,
-        kind: 'visit_ticket',
+        kind: 'adult_ticket',
         productKey: catalogKey('visit', 'required', ticketTariff, 'adult'),
         productGroup: 'visit',
         source: 'pricing.required_visit',
@@ -414,6 +415,8 @@ export default function PurchaseModal() {
 
     return lines;
   }, [purchaseItem, isTicket, adults, children, mainTicketAdultPrice, childPrice, mainTicketLabel, useWeekendPricingForMainTicket, mainTicketTariff, mainTicketSlot, fallbackAdultPrice, effectivePurchaseName, isService, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, requiresVisitTicket, ticketPrice, requiredVisitTicketLabel, ticketTariff]);
+  const [promoValidation, setPromoValidation] = useState<PromoValidation | null>(null);
+  const payableTotal = promoValidation?.totalAfterDiscount ?? totalPrice;
 
   const renderServiceBookingTimePicker = () => {
     if (!requiresServiceBooking || !serviceBookingDate) return null;
@@ -622,6 +625,7 @@ export default function PurchaseModal() {
           service_booking_label: requiresServiceBooking ? effectivePurchaseName : undefined,
           service_booking_section: requiresServiceBooking ? serviceBookingSection : undefined,
           line_items: checkoutLineItems,
+          promoCode: promoValidation?.code || '',
           ...(purchaseItem!.certificate && {
             cert_design: purchaseItem!.certificate.design,
             cert_occasion: purchaseItem!.certificate.occasion,
@@ -651,7 +655,7 @@ export default function PurchaseModal() {
         name,
         phone,
         itemName: effectivePurchaseName,
-        itemPrice: `${totalPrice.toLocaleString('ru-RU')} ₽`,
+        itemPrice: `${payableTotal.toLocaleString('ru-RU')} ₽`,
       });
 
       // Redirect to YooKassa payment page
@@ -1242,6 +1246,13 @@ export default function PurchaseModal() {
               </div>
             </div>
 
+            <PromoCodeField
+              items={checkoutLineItems}
+              email={email}
+              phone={phone}
+              onApplied={setPromoValidation}
+            />
+
             {/* Итого */}
             {addTicket && ticketPrice > 0 && (
               <div className="rounded-xl bg-surface border border-border px-5 py-4">
@@ -1255,7 +1266,7 @@ export default function PurchaseModal() {
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-border">
                   <span className="font-semibold text-text-primary">Итого:</span>
-                  <span className="text-xl font-bold text-primary">{totalPrice.toLocaleString('ru-RU')} ₽</span>
+                  <span className="text-xl font-bold text-primary">{payableTotal.toLocaleString('ru-RU')} ₽</span>
                 </div>
               </div>
             )}
@@ -1283,7 +1294,7 @@ export default function PurchaseModal() {
               ) : (
                 <>
                   <CreditCard className="h-5 w-5" />
-                  {modalText.submitPrefix || 'Оплатить —'} {(isTicket ? servicePrice : (addTicket && ticketPrice > 0 ? totalPrice : servicePrice)).toLocaleString('ru-RU')} ₽
+                  {modalText.submitPrefix || 'Оплатить —'} {payableTotal.toLocaleString('ru-RU')} ₽
                 </>
               )}
             </button>

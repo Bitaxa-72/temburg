@@ -3,6 +3,7 @@ import { X, Minus, Plus, Phone, CheckCircle, ChevronDown, CheckCircle2, Info, Ti
 import { useBooking, type CheckoutLineItem } from '@/context/BookingContext';
 import CertificateConfigurator from '@/components/shared/CertificateConfigurator';
 import LegalConsents from '@/components/shared/LegalConsents';
+import PromoCodeField, { type PromoValidation } from '@/components/shared/PromoCodeField';
 import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, subscriptions as localSubscriptions, type PricingSlot, type Subscription } from '@/data/pricing';
 import { steamServices as localSteamServices, massageServices as localMassageServices, spaServices as localSpaServices, type ServiceItem } from '@/data/services';
 import { getApiUrl } from '@/api/wordpress';
@@ -565,7 +566,7 @@ export default function BookingModal() {
         name: ticketLineName(additionalVisitLabel, 'adult'),
         price: visitPrice,
         quantity: 1,
-        kind: 'visit_ticket',
+        kind: 'adult_ticket',
         productKey: catalogKey('visit', visitPeriod, visitTariff, 'adult'),
         productGroup: 'visit',
         source: `pricing.${visitPeriod}`,
@@ -575,6 +576,8 @@ export default function BookingModal() {
 
     return lines;
   }, [bookingType, selectedVisitSlot, date, specialWeekendDates, mainVisitUsesFridayWeekendAllDay, fridayTime, selectedVisitLabel, adults, children, tariff, selectedServiceItem, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, selectedSubscription, certAmount, addVisit, visitPrice, visitDate, additionalVisitUsesFridayWeekendAllDay, additionalVisitLabel, visitTariff]);
+  const [promoValidation, setPromoValidation] = useState<PromoValidation | null>(null);
+  const payableTotal = promoValidation?.totalAfterDiscount ?? total;
 
   const renderServiceBookingTimePicker = () => {
     if (!requiresServiceBooking || !serviceBookingDate) return null;
@@ -666,6 +669,7 @@ export default function BookingModal() {
           service_booking_label: requiresServiceBooking ? (selectedServiceItem?.name || orderName) : undefined,
           service_booking_section: requiresServiceBooking ? serviceBookingSection : undefined,
           line_items: checkoutLineItems,
+          promoCode: promoValidation?.code || '',
         }),
       });
       const order = await response.json();
@@ -677,7 +681,7 @@ export default function BookingModal() {
         name,
         phone,
         itemName: orderName,
-        itemPrice: `${total.toLocaleString('ru-RU')} ₽`,
+        itemPrice: `${payableTotal.toLocaleString('ru-RU')} ₽`,
       });
       if (order.paymentUrl) {
         window.location.href = order.paymentUrl;
@@ -1325,13 +1329,22 @@ export default function BookingModal() {
             </div>
             )}
 
+            {bookingType !== 'certificate' && (
+              <PromoCodeField
+                items={checkoutLineItems}
+                email={email}
+                phone={phone}
+                onApplied={setPromoValidation}
+              />
+            )}
+
             {/* Итого */}
             {bookingType !== 'certificate' && total > 0 && (
               <div className="rounded-xl bg-background border border-border px-5 py-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-text-secondary">Итого</span>
                   <span className="text-2xl font-bold text-primary">
-                    {total.toLocaleString('ru-RU')}&nbsp;&#8381;
+                    {payableTotal.toLocaleString('ru-RU')}&nbsp;&#8381;
                   </span>
                 </div>
                 {bookingType === 'visit' && date && (
