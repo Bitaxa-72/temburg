@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { X, Minus, Plus, Phone, CheckCircle, ChevronDown, CheckCircle2, Info, Ticket, Clock } from 'lucide-react';
 import { useBooking, type CheckoutLineItem } from '@/context/BookingContext';
 import CertificateConfigurator from '@/components/shared/CertificateConfigurator';
+import LegalConsents from '@/components/shared/LegalConsents';
 import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, subscriptions as localSubscriptions, type PricingSlot, type Subscription } from '@/data/pricing';
 import { steamServices as localSteamServices, massageServices as localMassageServices, spaServices as localSpaServices, type ServiceItem } from '@/data/services';
 import { getApiUrl } from '@/api/wordpress';
@@ -9,6 +10,7 @@ import { wpServiceItems } from '@/utils/wpServices';
 import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions, tariffUsesFridayWeekendAllDay } from '@/utils/pricingTariffs';
 import { markPendingCheckoutConfirmed, savePendingCheckout } from '@/utils/paymentReturn';
 import { buildServiceBookingFallbackSlots, formatServiceBookingRange, getServiceBookingMinDate, getServiceReservedHours, normalizeServiceBookingSection, normalizeServiceBookingSlots, type ServiceBookingSlot } from '@/utils/serviceBooking';
+import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
 
 type BookingType = string;
 
@@ -479,12 +481,21 @@ export default function BookingModal() {
     const lines: CheckoutLineItem[] = [];
 
     if (bookingType === 'visit' && selectedVisitSlot) {
+      const visitPeriod = isSpecialWeekendDate(date, specialWeekendDates)
+        || isWeekend(date)
+        || (isFriday(date) && (mainVisitUsesFridayWeekendAllDay || fridayTime === 'after18'))
+        ? 'weekend'
+        : 'weekday';
       if (adults > 0 && selectedVisitSlot.adultPrice > 0) {
         lines.push({
           name: ticketLineName(selectedVisitLabel, 'adult'),
           price: selectedVisitSlot.adultPrice,
           quantity: adults,
           kind: 'adult_ticket',
+          productKey: catalogKey('visit', visitPeriod, tariff, 'adult'),
+          productGroup: 'visit',
+          source: `pricing.${visitPeriod}`,
+          sourceId: catalogSourceId(selectedVisitSlot.id),
         });
       }
       if (children > 0 && selectedVisitSlot.childPrice > 0) {
@@ -493,6 +504,10 @@ export default function BookingModal() {
           price: selectedVisitSlot.childPrice,
           quantity: children,
           kind: 'child_ticket',
+          productKey: catalogKey('visit', visitPeriod, tariff, 'child'),
+          productGroup: 'visit',
+          source: `pricing.${visitPeriod}`,
+          sourceId: catalogSourceId(selectedVisitSlot.id),
         });
       }
       return lines;
@@ -511,6 +526,10 @@ export default function BookingModal() {
           serviceSection: serviceBookingSection,
         } : {}),
         kind: 'service',
+        productKey: catalogKey('service', serviceBookingSection, selectedServiceItem.id || selectedServiceItem.name),
+        productGroup: 'service',
+        source: 'services-list',
+        sourceId: catalogSourceId(selectedServiceItem.id || selectedServiceItem.name),
       });
     } else if (bookingType === 'subscription' && selectedSubscription) {
       lines.push({
@@ -518,6 +537,10 @@ export default function BookingModal() {
         price: selectedSubscription.adultPrice,
         quantity: 1,
         kind: 'subscription',
+        productKey: catalogKey('subscription', selectedSubscription.id || selectedSubscription.name),
+        productGroup: 'subscription',
+        source: 'pricing.subscriptions',
+        sourceId: catalogSourceId(selectedSubscription.id || selectedSubscription.name),
       });
     } else if (bookingType === 'certificate' && typeof certAmount === 'number') {
       lines.push({
@@ -525,20 +548,33 @@ export default function BookingModal() {
         price: certAmount,
         quantity: 1,
         kind: 'certificate',
+        productKey: catalogKey('certificate', 'custom'),
+        productGroup: 'certificate',
+        source: 'certificate.configurator',
+        sourceId: 'custom',
       });
     }
 
     if (addVisit && visitPrice > 0) {
+      const visitPeriod = isSpecialWeekendDate(visitDate, specialWeekendDates)
+        || isWeekend(visitDate)
+        || (isFriday(visitDate) && (additionalVisitUsesFridayWeekendAllDay || fridayTime === 'after18'))
+        ? 'weekend'
+        : 'weekday';
       lines.push({
         name: ticketLineName(additionalVisitLabel, 'adult'),
         price: visitPrice,
         quantity: 1,
         kind: 'visit_ticket',
+        productKey: catalogKey('visit', visitPeriod, visitTariff, 'adult'),
+        productGroup: 'visit',
+        source: `pricing.${visitPeriod}`,
+        sourceId: catalogSourceId(visitTariff),
       });
     }
 
     return lines;
-  }, [bookingType, selectedVisitSlot, selectedVisitLabel, adults, children, selectedServiceItem, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, selectedSubscription, certAmount, addVisit, visitPrice, additionalVisitLabel]);
+  }, [bookingType, selectedVisitSlot, date, specialWeekendDates, mainVisitUsesFridayWeekendAllDay, fridayTime, selectedVisitLabel, adults, children, tariff, selectedServiceItem, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, selectedSubscription, certAmount, addVisit, visitPrice, visitDate, additionalVisitUsesFridayWeekendAllDay, additionalVisitLabel, visitTariff]);
 
   const renderServiceBookingTimePicker = () => {
     if (!requiresServiceBooking || !serviceBookingDate) return null;
@@ -1315,13 +1351,16 @@ export default function BookingModal() {
               </p>
             )}
             {bookingType !== 'certificate' && (
-            <button
-              type="submit"
-              disabled={serviceBookingBlocked}
-              className="w-full rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-primary-light active:brightness-90 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {modalText.submitLabel || 'Оплатить мою порцию счастья'}
-            </button>
+              <>
+                <LegalConsents />
+                <button
+                  type="submit"
+                  disabled={serviceBookingBlocked}
+                  className="w-full rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-primary-light active:brightness-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {modalText.submitLabel || 'Оплатить мою порцию счастья'}
+                </button>
+              </>
             )}
             <button
               type="button"

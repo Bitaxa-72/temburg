@@ -4,6 +4,7 @@ import { Phone, Lock, User, Mail, Eye, EyeOff, Loader2 } from 'lucide-react';
 import PageLayout from '@/components/layout/PageLayout';
 import Container from '@/components/ui/Container';
 import { useAuth } from '@/context/AuthContext';
+import LegalConsents from '@/components/shared/LegalConsents';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
 
@@ -299,7 +300,8 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Submit */}
+              {mode === 'register' && <LegalConsents tone="dark" />}
+
               <button
                 type="submit"
                 disabled={isSubmitting}

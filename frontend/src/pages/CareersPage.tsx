@@ -9,6 +9,7 @@ import Section from '@/components/ui/Section';
 import Container from '@/components/ui/Container';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
+import LegalConsents from '@/components/shared/LegalConsents';
 import type { WPCareerVacancy, WPCareersBenefit } from '@/api/wordpress';
 
 const fallbackStats = [
@@ -302,6 +303,8 @@ export default function CareersPage() {
                   className="w-full rounded-xl bg-background border border-border/50 px-4 py-3 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-primary focus:outline-none transition-colors resize-none"
                 />
               </div>
+
+              <LegalConsents />
 
               <button
                 type="submit"

@@ -24,11 +24,13 @@ import Section from '@/components/ui/Section';
 import Badge from '@/components/ui/Badge';
 import TicketButton from '@/components/ui/TicketButton';
 import Container from '@/components/ui/Container';
-import { useBooking } from '@/context/BookingContext';
+import { useBooking, type PurchaseItem } from '@/context/BookingContext';
 import { usePricing } from '@/hooks/useWordPressData';
 import PricingPreviewSection from '@/components/sections/home/PricingPreviewSection';
+import LegalConsents from '@/components/shared/LegalConsents';
 import type { WPGiftBox, WPMerchItem } from '@/api/wordpress';
 import { getTariffOptionId } from '@/utils/pricingTariffs';
+import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
 
 const serviceLinks = [
   { name: 'Парения и SPA', image: '/images/heroes/services.webp', href: '/services' },
@@ -404,7 +406,7 @@ const certificateImages = localCertificateCategories.flatMap(cat => cat.images);
 const CERT_API_URL = '/wp-json/termburg/v1/certificates' as const;
 
 /* ─── Certificate Section Component ─── */
-function CertificateSection({ openPurchase }: { openPurchase: (data: { name: string; price: string }) => void }) {
+function CertificateSection({ openPurchase }: { openPurchase: (data: PurchaseItem) => void }) {
   const [certCats, setCertCats] = useState(localCertificateCategories);
 
   useEffect(() => {
@@ -479,7 +481,24 @@ function CertificateSection({ openPurchase }: { openPurchase: (data: { name: str
             className="rounded-xl bg-surface border border-border p-6 space-y-4 shadow-lg"
             onSubmit={(e) => {
               e.preventDefault();
-              openPurchase({ name: 'Подарочный сертификат', price: 'Индивидуальная сумма' });
+              const data = new FormData(e.currentTarget);
+              const amount = Math.max(1000, Number(data.get('amount')) || 1000);
+              const wish = String(data.get('wish') || '').trim();
+              openPurchase({
+                name: 'Подарочный сертификат',
+                price: `${amount.toLocaleString('ru-RU')} ₽`,
+                certificate: {
+                  design: 'pricing',
+                  occasion: 'Подарочный сертификат',
+                  amount,
+                  recipientName: '',
+                  recipientPhone: '',
+                  wish,
+                  emoji: '🎁',
+                  color: '#B68B2E',
+                  code: catalogKey('certificate', 'pricing', amount),
+                },
+              });
             }}
           >
             <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-text-secondary">
@@ -505,6 +524,7 @@ function CertificateSection({ openPurchase }: { openPurchase: (data: { name: str
               </div>
               <input
                 id="cert-amount-pricing"
+                name="amount"
                 type="number"
                 min={1000}
                 step={500}
@@ -516,11 +536,13 @@ function CertificateSection({ openPurchase }: { openPurchase: (data: { name: str
             <div>
               <label className="block text-sm text-text-secondary mb-1.5">Пожелание (необязательно)</label>
               <textarea
+                name="wish"
                 rows={2}
                 placeholder="Напишите тёплые слова..."
                 className="w-full rounded-lg bg-background border border-border px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:border-primary/50 transition-colors resize-none text-sm"
               />
             </div>
+            <LegalConsents />
             <button
               type="submit"
               className="w-full rounded-xl bg-primary hover:bg-primary-light text-dark-surface font-bold py-3.5 text-lg transition-colors shadow-lg shadow-primary/20"
@@ -735,7 +757,20 @@ export default function PricingPage() {
                 description={sub.description}
                 badge={sub.badge || highlight?.badge}
                 badgeVariant={(sub.badgeVariant as 'default' | 'gold' | 'success' | undefined) || highlight?.badgeVariant}
-                onPurchase={() => openPurchase({ name: `Абонемент «${sub.name}»`, price: `${sub.adultPrice.toLocaleString('ru-RU')} ₽` })}
+                onPurchase={() => openPurchase({
+                  name: `Абонемент «${sub.name}»`,
+                  price: `${sub.adultPrice.toLocaleString('ru-RU')} ₽`,
+                  lineItems: [{
+                    name: `Абонемент «${sub.name}»`,
+                    price: sub.adultPrice,
+                    quantity: 1,
+                    kind: 'subscription',
+                    productKey: catalogKey('subscription', sub.id || sub.name),
+                    productGroup: 'subscription',
+                    source: 'pricing.subscriptions',
+                    sourceId: catalogSourceId(sub.id || sub.name),
+                  }],
+                })}
               />
             );
           })}
@@ -758,7 +793,20 @@ export default function PricingPage() {
             <GiftBoxCard
               key={box.id}
               box={box}
-              onPurchase={() => openPurchase({ name: box.name, price: `${box.price.toLocaleString('ru-RU')} ₽` })}
+              onPurchase={() => openPurchase({
+                name: box.name,
+                price: `${box.price.toLocaleString('ru-RU')} ₽`,
+                lineItems: [{
+                  name: box.name,
+                  price: box.price,
+                  quantity: 1,
+                  kind: 'gift_box',
+                  productKey: catalogKey('gift-box', box.id || box.name),
+                  productGroup: 'gift_box',
+                  source: 'pricing.gift_boxes',
+                  sourceId: catalogSourceId(box.id || box.name),
+                }],
+              })}
             />
           ))}
         </div>
@@ -778,7 +826,20 @@ export default function PricingPage() {
             <div
               key={item.id}
               className="flex flex-col rounded-2xl bg-surface border border-border/50 hover:border-primary/20 p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg cursor-pointer"
-              onClick={() => openPurchase({ name: item.name, price: `${item.price.toLocaleString('ru-RU')} ₽` })}
+              onClick={() => openPurchase({
+                name: item.name,
+                price: `${item.price.toLocaleString('ru-RU')} ₽`,
+                lineItems: [{
+                  name: item.name,
+                  price: item.price,
+                  quantity: 1,
+                  kind: 'merch',
+                  productKey: catalogKey('merch', item.id || item.name),
+                  productGroup: 'merch',
+                  source: 'pricing.merch',
+                  sourceId: catalogSourceId(item.id || item.name),
+                }],
+              })}
             >
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                 <ShoppingBag className="w-6 h-6 text-primary" />

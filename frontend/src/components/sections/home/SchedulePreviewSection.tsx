@@ -4,6 +4,7 @@ import { ArrowRight, ChevronRight } from 'lucide-react';
 import { useBooking } from '@/context/BookingContext';
 import { useSchedule } from '@/hooks/useWordPressData';
 import { mapScheduleData } from '@/utils/scheduleData';
+import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
 
 function getCurrentDayName(): string {
   const days = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
@@ -72,7 +73,11 @@ const SchedulePreviewSection = memo(function SchedulePreviewSection() {
                       price: Number(event.price) || 0,
                       quantity: 1,
                       duration: event.duration,
-                      kind: 'service',
+                      kind: 'event',
+                      productKey: catalogKey('event', event.id || event.name),
+                      productGroup: 'event',
+                      source: 'schedule.preview',
+                      sourceId: catalogSourceId(event.id || event.name),
                     }],
                   });
                 } else {

@@ -5,6 +5,7 @@ import PageHero from '@/components/shared/PageHero';
 import Section from '@/components/ui/Section';
 import Container from '@/components/ui/Container';
 import { useBooking } from '@/context/BookingContext';
+import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
 import { useSchedule } from '@/hooks/useWordPressData';
 import { daysOfWeek, type ScheduleEvent } from '@/data/schedule';
 import { usePageContent } from '@/hooks/useWordPressData';
@@ -164,7 +165,11 @@ function EventRow({ event, showDays }: { event: ScheduleEvent; showDays?: boolea
               price: Number(event.price) || 0,
               quantity: 1,
               duration: event.duration,
-              kind: 'service',
+              kind: 'event',
+              productKey: catalogKey('event', event.id || event.name),
+              productGroup: 'event',
+              source: 'schedule',
+              sourceId: catalogSourceId(event.id || event.name),
             }],
           });
         }

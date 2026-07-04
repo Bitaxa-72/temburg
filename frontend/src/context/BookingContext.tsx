@@ -26,7 +26,11 @@ export interface CheckoutLineItem {
   serviceStartHour?: number;
   reservedHours?: number;
   serviceSection?: ServiceBookingSection;
-  kind?: 'adult_ticket' | 'child_ticket' | 'visit_ticket' | 'service' | 'subscription' | 'certificate' | 'product';
+  kind?: 'adult_ticket' | 'child_ticket' | 'child_under6_ticket' | 'pensioner_ticket' | 'visit_ticket' | 'service' | 'event' | 'subscription' | 'certificate' | 'gift_box' | 'merch' | 'product';
+  productKey?: string;
+  productGroup?: string;
+  source?: string;
+  sourceId?: string;
 }
 
 export interface PurchaseItem {

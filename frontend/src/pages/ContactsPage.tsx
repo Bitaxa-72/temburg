@@ -11,6 +11,7 @@ import { contactInfo as fallbackContact, type RouteDirection } from '@/data/cont
 import { useSettings, useContactsContent } from '@/hooks/useWordPressData';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
+import LegalConsents from '@/components/shared/LegalConsents';
 
 const routeIcons: Record<RouteDirection['icon'], typeof Train> = {
   metro: Train,
@@ -348,6 +349,7 @@ export default function ContactsPage() {
                     className="w-full rounded-xl bg-background border border-border/50 px-4 py-3 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-primary focus:outline-none transition-colors resize-none"
                   />
                 </div>
+                <LegalConsents />
                 <div className="flex flex-wrap items-center gap-4">
                   <button
                     type="submit"

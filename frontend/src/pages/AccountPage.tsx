@@ -26,6 +26,7 @@ import {
 import PageLayout from '@/components/layout/PageLayout';
 import Container from '@/components/ui/Container';
 import Badge from '@/components/ui/Badge';
+import LegalConsents from '@/components/shared/LegalConsents';
 import { getEmployeesOfMonth, saveEmployeesOfMonth, type Employee, defaultEmployeesOfMonth } from '@/data/employees';
 import { useAuth, useRequireAuth } from '@/context/AuthContext';
 import { bookingsApi, type Booking, type BookingStatus } from '@/services/api';
@@ -301,6 +302,7 @@ function ProfileTab() {
               className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-text-primary focus:border-primary focus:outline-none"
             />
           </div>
+          <LegalConsents />
           <div className="flex gap-3">
             <button
               type="button"

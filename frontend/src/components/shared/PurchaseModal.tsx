@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { X, CheckCircle, Phone, Users, Baby, Ticket, ChevronDown, Calendar, Clock, Minus, Plus, UserPlus, Loader2, Eye, EyeOff, Copy, Check, AlertCircle, CreditCard } from 'lucide-react';
 import { useBooking, type CheckoutLineItem } from '@/context/BookingContext';
 import { useAuth } from '@/context/AuthContext';
+import LegalConsents from '@/components/shared/LegalConsents';
 import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, type PricingSlot } from '@/data/pricing';
 import { bookingsApi, paymentsApi, type ServiceType } from '@/services/api';
 import { getApiUrl } from '@/api/wordpress';
 import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions, tariffUsesFridayWeekendAllDay, type TariffOption } from '@/utils/pricingTariffs';
 import { cleanPaymentReturnUrl, clearPendingCheckout, getPaymentReturnParams, getPendingCheckout, markPendingCheckoutConfirmed, savePendingCheckout } from '@/utils/paymentReturn';
 import { buildServiceBookingFallbackSlots, formatServiceBookingRange, getServiceBookingMinDate, getServiceReservedHours, normalizeServiceBookingSection, normalizeServiceBookingSlots, type ServiceBookingSlot } from '@/utils/serviceBooking';
+import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
 
 // Generate random password
 function generatePassword(length = 12): string {
@@ -136,6 +138,10 @@ function normalizeCheckoutLineItems(items: CheckoutLineItem[] | undefined): Chec
       serviceStartHour: item.serviceStartHour !== undefined ? Number(item.serviceStartHour) : undefined,
       reservedHours: item.reservedHours !== undefined ? Number(item.reservedHours) : undefined,
       serviceSection: item.serviceSection ? normalizeServiceBookingSection(item.serviceSection) : undefined,
+      productKey: String(item.productKey || '').trim(),
+      productGroup: String(item.productGroup || '').trim(),
+      source: String(item.source || '').trim(),
+      sourceId: String(item.sourceId || '').trim(),
     }))
     .filter((item) => item.name && item.price > 0);
 }
@@ -337,6 +343,10 @@ export default function PurchaseModal() {
             price: mainTicketAdultPrice,
             quantity: adults,
             kind: 'adult_ticket',
+            productKey: catalogKey('visit', useWeekendPricingForMainTicket ? 'weekend' : 'weekday', mainTicketTariff, 'adult'),
+            productGroup: 'visit',
+            source: useWeekendPricingForMainTicket ? 'pricing.weekend' : 'pricing.weekday',
+            sourceId: catalogSourceId(mainTicketSlot?.id ?? mainTicketTariff),
           });
         }
         if (children > 0 && childPrice > 0) {
@@ -345,6 +355,10 @@ export default function PurchaseModal() {
             price: childPrice,
             quantity: children,
             kind: 'child_ticket',
+            productKey: catalogKey('visit', useWeekendPricingForMainTicket ? 'weekend' : 'weekday', mainTicketTariff, 'child'),
+            productGroup: 'visit',
+            source: useWeekendPricingForMainTicket ? 'pricing.weekend' : 'pricing.weekday',
+            sourceId: catalogSourceId(mainTicketSlot?.id ?? mainTicketTariff),
           });
         }
       } else if (purchaseItem.certificate) {
@@ -353,6 +367,10 @@ export default function PurchaseModal() {
           price: purchaseItem.certificate.amount,
           quantity: 1,
           kind: 'certificate',
+          productKey: catalogKey('certificate', purchaseItem.certificate.occasion || 'custom'),
+          productGroup: 'certificate',
+          source: 'certificate.configurator',
+          sourceId: catalogSourceId(purchaseItem.certificate.design || purchaseItem.certificate.code),
         });
       } else if (fallbackAdultPrice > 0) {
         lines.push({
@@ -361,6 +379,10 @@ export default function PurchaseModal() {
           quantity: 1,
           duration: purchaseItem.duration,
           kind: isService ? 'service' : 'product',
+          productKey: catalogKey(isService ? 'service' : 'product', purchaseItem.name),
+          productGroup: isService ? 'service' : 'product',
+          source: isService ? 'purchase.service' : 'purchase.product',
+          sourceId: catalogSourceId(purchaseItem.name),
         });
       }
     }
@@ -383,11 +405,15 @@ export default function PurchaseModal() {
         price: ticketPrice,
         quantity: 1,
         kind: 'visit_ticket',
+        productKey: catalogKey('visit', 'required', ticketTariff, 'adult'),
+        productGroup: 'visit',
+        source: 'pricing.required_visit',
+        sourceId: catalogSourceId(ticketTariff),
       });
     }
 
     return lines;
-  }, [purchaseItem, isTicket, adults, children, mainTicketAdultPrice, childPrice, mainTicketLabel, fallbackAdultPrice, effectivePurchaseName, isService, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, requiresVisitTicket, ticketPrice, requiredVisitTicketLabel]);
+  }, [purchaseItem, isTicket, adults, children, mainTicketAdultPrice, childPrice, mainTicketLabel, useWeekendPricingForMainTicket, mainTicketTariff, mainTicketSlot, fallbackAdultPrice, effectivePurchaseName, isService, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, requiresVisitTicket, ticketPrice, requiredVisitTicketLabel, ticketTariff]);
 
   const renderServiceBookingTimePicker = () => {
     if (!requiresServiceBooking || !serviceBookingDate) return null;
@@ -1243,7 +1269,7 @@ export default function PurchaseModal() {
               </div>
             )}
 
-            {/* Submit */}
+            <LegalConsents />
             <button
               type="submit"
               disabled={isSubmitting || serviceBookingBlocked}

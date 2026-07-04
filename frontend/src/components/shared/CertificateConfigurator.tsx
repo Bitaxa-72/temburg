@@ -3,6 +3,7 @@ import { toPng } from 'html-to-image';
 import JsBarcode from 'jsbarcode';
 import { Gift, Sparkles, Heart, Star, Check, Plus } from 'lucide-react';
 import { getApiUrl } from '@/api/wordpress';
+import LegalConsents from '@/components/shared/LegalConsents';
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, '');
@@ -746,6 +747,8 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                 ))}
               </div>
             </div>
+
+            <LegalConsents />
 
             <button
               type="button"

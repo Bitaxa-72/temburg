@@ -6,6 +6,7 @@ import Section from '@/components/ui/Section';
 import Container from '@/components/ui/Container';
 import { usePageContent } from '@/hooks/useWordPressData';
 import WPContentBlocks from '@/components/shared/WPContentBlocks'; /* WP_PAGE_CONTENT_HOOK */
+import LegalConsents from '@/components/shared/LegalConsents';
 
 const advantages = [
   {
@@ -160,6 +161,7 @@ export default function PartnersPage() {
                   className="w-full rounded-xl bg-background border border-border/50 px-4 py-3 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-primary focus:outline-none transition-colors resize-none"
                 />
               </div>
+              <LegalConsents />
               <button
                 type="submit"
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 font-semibold text-white hover:bg-primary-light transition-colors"

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Waves, Phone, CheckCircle, Calendar, Clock, User, Users } from 'lucide-react';
 import { useBooking } from '@/context/BookingContext';
+import LegalConsents from '@/components/shared/LegalConsents';
 
 const scheduleOptions = [
   { id: 'friday', label: 'Пятница 16:00' },
@@ -182,7 +183,7 @@ export default function SwimmingEnrollmentModal() {
               <Waves className="h-10 w-10 text-info/20" />
             </div>
 
-            {/* Submit */}
+            <LegalConsents />
             <button
               type="button"
               onClick={handleSubmit}

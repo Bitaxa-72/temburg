@@ -3,10 +3,12 @@ import { Routes, Route } from 'react-router-dom';
 import ScrollToTop from '@/components/shared/ScrollToTop';
 import ScrollToTopButton from '@/components/shared/ScrollToTopButton';
 import CookieConsent from '@/components/shared/CookieConsent';
+import VkPromoWidget from '@/components/shared/VkPromoWidget';
 import { useBooking } from '@/context/BookingContext';
 import { useImagePreloader } from '@/hooks/useImage';
 import OfferPage from '@/pages/OfferPage';
 import PrivacyPage from '@/pages/PrivacyPage';
+import PersonalDataConsentPage from '@/pages/PersonalDataConsentPage';
 import RulesPage from '@/pages/RulesPage';
 
 // Lazy load modals - they're only needed when opened
@@ -66,6 +68,7 @@ export default function App() {
     openSearch,
     closeModal
   } = useBooking();
+  const modalOpen = bookingOpen || purchaseOpen || bathDetailOpen || whatToBringOpen || clayModalOpen || swimmingEnrollmentOpen || searchOpen;
 
   // Preload WordPress image mapping for faster image resolution
   useImagePreloader();
@@ -88,6 +91,7 @@ export default function App() {
       <ScrollToTop />
       <ScrollToTopButton />
       <CookieConsent />
+      <VkPromoWidget hidden={modalOpen} />
 
       {/* Lazy-loaded modals - only render when opened */}
       {bookingOpen && (
@@ -145,6 +149,7 @@ export default function App() {
           <Route path="/careers" element={<CareersPage />} />
           <Route path="/offer" element={<OfferPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/soglasie-na-obrabotku-personalnyh-dannyh" element={<PersonalDataConsentPage />} />
           <Route path="/rules" element={<RulesPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/account" element={<AccountPage />} />

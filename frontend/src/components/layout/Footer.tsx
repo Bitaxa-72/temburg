@@ -31,6 +31,7 @@ export default function Footer() {
     { to: '/careers', label: footer.bottomLinks?.careers || 'Вакансии' },
     { to: '/offer', label: footer.bottomLinks?.offer || 'Публичная оферта' },
     { to: '/privacy', label: footer.bottomLinks?.privacy || 'Политика конфиденциальности' },
+    { to: '/soglasie-na-obrabotku-personalnyh-dannyh', label: 'Согласие на обработку персональных данных' },
     { to: '/rules', label: footer.bottomLinks?.rules || 'Правила комплекса' },
   ].filter((link) => link.label);
 
