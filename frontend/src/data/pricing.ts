@@ -5,6 +5,10 @@ export interface PricingSlot {
   adultPrice: number;
   childPrice: number;
   fridayWeekendAllDay?: boolean;
+  availableUntil?: string;
+  noticeLines?: string[];
+  purchaseTimeFrom?: string;
+  purchaseTimeTo?: string;
 }
 
 export interface Subscription {

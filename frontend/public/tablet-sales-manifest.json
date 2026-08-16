@@ -1,0 +1,19 @@
+{
+  "name": "Термбург продажи",
+  "short_name": "Термбург",
+  "description": "Планшет продаж Термбурга",
+  "start_url": "/tablet-sales",
+  "scope": "/tablet-sales",
+  "display": "standalone",
+  "background_color": "#f8f1e7",
+  "theme_color": "#b69045",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

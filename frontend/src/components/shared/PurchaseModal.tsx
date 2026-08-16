@@ -4,13 +4,14 @@ import { useBooking, type CheckoutLineItem } from '@/context/BookingContext';
 import { useAuth } from '@/context/AuthContext';
 import LegalConsents from '@/components/shared/LegalConsents';
 import PromoCodeField, { type PromoValidation } from '@/components/shared/PromoCodeField';
-import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, type PricingSlot } from '@/data/pricing';
+import { type PricingSlot } from '@/data/pricing';
 import { bookingsApi, paymentsApi, type ServiceType } from '@/services/api';
 import { getApiUrl } from '@/api/wordpress';
-import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions, tariffUsesFridayWeekendAllDay, type TariffOption } from '@/utils/pricingTariffs';
+import { findPricingSlot, formatDateRu, getDefaultTariffId, getTariffAvailableUntil, getTariffLabel, getTariffNoticeLines, getTariffOptions, getTariffTimeWindow, getTariffTimeWindowText, isDateAfter, isTimeOutsideTariffWindow, normalizeNoticeLines, normalizeTimeValue, tariffUsesFridayWeekendAllDay, type TariffOption } from '@/utils/pricingTariffs';
 import { cleanPaymentReturnUrl, clearPendingCheckout, getPaymentReturnParams, getPendingCheckout, markPendingCheckoutConfirmed, savePendingCheckout } from '@/utils/paymentReturn';
 import { buildServiceBookingFallbackSlots, formatServiceBookingRange, getServiceBookingMinDate, getServiceReservedHours, normalizeServiceBookingSection, normalizeServiceBookingSlots, type ServiceBookingSlot } from '@/utils/serviceBooking';
 import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
+import { createCheckoutRequestId } from '@/utils/checkoutRequest';
 
 // Generate random password
 function generatePassword(length = 12): string {
@@ -29,6 +30,10 @@ function normalizePricingSlots(slots: PricingSlot[] | undefined): PricingSlot[] 
     adultPrice: Number(slot.adultPrice) || 0,
     childPrice: Number(slot.childPrice) || 0,
     fridayWeekendAllDay: Boolean(slot.fridayWeekendAllDay),
+    availableUntil: String(slot.availableUntil || ''),
+    noticeLines: normalizeNoticeLines(slot.noticeLines),
+    purchaseTimeFrom: normalizeTimeValue(slot.purchaseTimeFrom),
+    purchaseTimeTo: normalizeTimeValue(slot.purchaseTimeTo),
   }));
 }
 
@@ -135,6 +140,8 @@ function normalizeCheckoutLineItems(items: CheckoutLineItem[] | undefined): Chec
       price: Number(item.price) || 0,
       quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
       duration: String(item.duration || '').trim(),
+      eventDate: item.eventDate ? String(item.eventDate) : undefined,
+      eventTime: item.eventTime ? String(item.eventTime) : undefined,
       serviceDate: item.serviceDate ? String(item.serviceDate) : undefined,
       serviceStartHour: item.serviceStartHour !== undefined ? Number(item.serviceStartHour) : undefined,
       reservedHours: item.reservedHours !== undefined ? Number(item.reservedHours) : undefined,
@@ -152,8 +159,21 @@ function ticketLineName(label: string, type: 'adult' | 'child') {
   return `${label || 'Входной билет'} ${suffix}`;
 }
 
+function isTabletSalesPath() {
+  if (typeof window === 'undefined') return false;
+  return window.location.pathname.replace(/\/+$/, '') === '/tablet-sales';
+}
+
 export default function PurchaseModal() {
   const { purchaseOpen, purchaseItem, closeModal } = useBooking();
+  const [checkoutRequestId, setCheckoutRequestId] = useState('');
+  const isTabletSalesMode = isTabletSalesPath();
+
+  useEffect(() => {
+    if (purchaseOpen) {
+      setCheckoutRequestId(createCheckoutRequestId());
+    }
+  }, [purchaseOpen, purchaseItem]);
   const { isAuthenticated, user, register } = useAuth();
   const paymentPreview = import.meta.env.DEV
     ? new URLSearchParams(window.location.search).get('payment-preview')
@@ -161,7 +181,6 @@ export default function PurchaseModal() {
   const isPaymentPreview = paymentPreview === 'success' || paymentPreview === 'registered';
   const paymentReturn = useMemo(() => getPaymentReturnParams(), []);
 
-  // WP pricing data with local fallback
   const [wpPricing, setWpPricing] = useState<any>(null);
   useEffect(() => {
     let cancelled = false;
@@ -171,9 +190,8 @@ export default function PurchaseModal() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
-  const hasWpPricing = wpPricing !== null;
-  const weekdayPricing: PricingSlot[] = hasWpPricing ? normalizePricingSlots(wpPricing.weekday) : localWeekdayPricing;
-  const weekendPricing: PricingSlot[] = hasWpPricing ? normalizePricingSlots(wpPricing.weekend) : localWeekendPricing;
+  const weekdayPricing: PricingSlot[] = normalizePricingSlots(wpPricing?.weekday);
+  const weekendPricing: PricingSlot[] = normalizePricingSlots(wpPricing?.weekend);
   const specialWeekendDates = useMemo(
     () => new Set<string>(Array.isArray(wpPricing?.specialWeekendDates) ? wpPricing.specialWeekendDates : []),
     [wpPricing]
@@ -186,7 +204,7 @@ export default function PurchaseModal() {
   );
   const defaultTariffId = useMemo(() => getDefaultTariffId(tariffOptions), [tariffOptions]);
   const hasVisitTariffs = tariffOptions.length > 0;
-  const childUnder6Price = wpPricing?.childUnder6 ?? 470;
+  const childUnder6Price = wpPricing?.childUnder6 ?? 0;
   const childNoteText = (modalText.childNote || pricingContent.childNote || 'Дети до 6 лет включительно — {price} ₽ безлимит')
     .replace('{price}', childUnder6Price.toLocaleString('ru-RU'));
   const [step, setStep] = useState<'form' | 'processing' | 'success' | 'register' | 'error'>('form');
@@ -206,6 +224,9 @@ export default function PurchaseModal() {
   const handlePhoneChange = (value: string) => {
     setPhone(formatPhone(value));
   };
+  const tabletReturnUrl = isTabletSalesMode && typeof window !== 'undefined'
+    ? `${window.location.origin}/tablet-sales`
+    : undefined;
   const [visitDate, setVisitDate] = useState('');
   const [visitTime, setVisitTime] = useState('12:00');
 
@@ -218,6 +239,7 @@ export default function PurchaseModal() {
   const [ticketType, setTicketType] = useState<TicketType>('adult');
   const [addTicket, setAddTicket] = useState(false);
   const [ticketDate, setTicketDate] = useState('');
+  const [ticketTime, setTicketTime] = useState('09:00');
   const [ticketTariff, setTicketTariff] = useState(defaultTariffId);
   const [fridayTime, setFridayTime] = useState<'before18' | 'after18'>('before18');
   const [serviceHour, setServiceHour] = useState('');
@@ -277,17 +299,35 @@ export default function PurchaseModal() {
   }, [purchaseItem]);
   const mainTicketAdultPrice = isTicket ? (mainTicketSlot?.adultPrice ?? fallbackAdultPrice) : fallbackAdultPrice;
   const ticketUsesFridayWeekendAllDay = tariffUsesFridayWeekendAllDay(tariffOptions, ticketTariff, weekdayPricing, weekendPricing);
+  const normalizedVisitTime = normalizeTimeValue(visitTime) || '12:00';
+  const normalizedTicketTime = normalizeTimeValue(ticketTime) || '09:00';
+  const mainTicketAvailableUntil = purchaseItem?.availableUntil || getTariffAvailableUntil(tariffOptions, mainTicketTariff, weekdayPricing, weekendPricing);
+  const ticketAvailableUntil = getTariffAvailableUntil(tariffOptions, ticketTariff, weekdayPricing, weekendPricing);
+  const mainTicketNoticeLines = purchaseItem?.noticeLines?.length
+    ? purchaseItem.noticeLines
+    : getTariffNoticeLines(tariffOptions, mainTicketTariff, weekdayPricing, weekendPricing);
+  const ticketNoticeLines = getTariffNoticeLines(tariffOptions, ticketTariff, weekdayPricing, weekendPricing);
+  const mainTicketTimeWindow = purchaseItem?.purchaseTimeFrom || purchaseItem?.purchaseTimeTo
+    ? { from: normalizeTimeValue(purchaseItem.purchaseTimeFrom), to: normalizeTimeValue(purchaseItem.purchaseTimeTo) }
+    : getTariffTimeWindow(tariffOptions, mainTicketTariff, weekdayPricing, weekendPricing);
+  const ticketTimeWindow = getTariffTimeWindow(tariffOptions, ticketTariff, weekdayPricing, weekendPricing);
+  const mainTicketWindowText = getTariffTimeWindowText(mainTicketTimeWindow);
+  const ticketWindowText = getTariffTimeWindowText(ticketTimeWindow);
+  const mainTicketExpired = isTicket && isDateAfter(visitDate, mainTicketAvailableUntil);
+  const ticketExpired = addTicket && isDateAfter(ticketDate, ticketAvailableUntil);
+  const mainTicketTimeBlocked = isTicket && isTimeOutsideTariffWindow(normalizedVisitTime, mainTicketTimeWindow);
+  const ticketTimeBlocked = addTicket && isTimeOutsideTariffWindow(normalizedTicketTime, ticketTimeWindow);
 
   // Расчёт стоимости входного билета
   const ticketPrice = useMemo(() => {
     if (!addTicket || !ticketDate) return 0;
     const useWeekendPricing = isSpecialWeekendDate(ticketDate, specialWeekendDates)
       || isWeekend(ticketDate)
-      || (isFriday(ticketDate) && (ticketUsesFridayWeekendAllDay || fridayTime === 'after18'));
+      || (isFriday(ticketDate) && (ticketUsesFridayWeekendAllDay || isFridayWeekendTime(normalizedTicketTime)));
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     const slot = findPricingSlot(pricing, ticketTariff, tariffOptions);
     return slot?.adultPrice ?? 0;
-  }, [addTicket, ticketDate, ticketTariff, ticketUsesFridayWeekendAllDay, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+  }, [addTicket, ticketDate, ticketTariff, ticketUsesFridayWeekendAllDay, normalizedTicketTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
 
   // Стоимость детского билета
   const childPrice = useMemo(() => {
@@ -325,6 +365,8 @@ export default function PurchaseModal() {
   );
   const serviceBookingBlocked = requiresServiceBooking
     && (!serviceBookingDate || !serviceHour || serviceSlotsLoading || Boolean(serviceSlotsError) || !selectedServiceSlot?.available);
+  const tariffRestrictionBlocked = mainTicketExpired || ticketExpired || mainTicketTimeBlocked || ticketTimeBlocked;
+  const submitBlocked = isSubmitting || serviceBookingBlocked || tariffRestrictionBlocked;
   const hasChildPrice = !!purchaseItem?.childPrice;
   const displayPrice = ticketType === 'child' && hasChildPrice ? purchaseItem!.childPrice! : purchaseItem?.price ?? '';
   const mainTicketPeriodLabel = useWeekendPricingForMainTicket ? 'Выходные / Праздники' : 'Будни';
@@ -417,6 +459,36 @@ export default function PurchaseModal() {
   }, [purchaseItem, isTicket, adults, children, mainTicketAdultPrice, childPrice, mainTicketLabel, useWeekendPricingForMainTicket, mainTicketTariff, mainTicketSlot, fallbackAdultPrice, effectivePurchaseName, isService, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, requiresVisitTicket, ticketPrice, requiredVisitTicketLabel, ticketTariff]);
   const [promoValidation, setPromoValidation] = useState<PromoValidation | null>(null);
   const payableTotal = promoValidation?.totalAfterDiscount ?? totalPrice;
+  const handlePromoApplied = useCallback((nextPromoValidation: PromoValidation | null) => {
+    setPromoValidation(nextPromoValidation);
+    setCheckoutRequestId(createCheckoutRequestId());
+  }, []);
+
+  const renderTariffMessages = (
+    noticeLines: string[],
+    availableUntil: string,
+    expired: boolean,
+    windowText: string,
+    timeBlocked: boolean,
+  ) => (
+    <>
+      {noticeLines.map((line) => (
+        <p key={line} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+          {line}
+        </p>
+      ))}
+      {availableUntil && (
+        <p className={`rounded-lg border px-3 py-2 text-xs font-medium ${expired ? 'border-red-200 bg-red-50 text-red-600' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+          Доступно по {formatDateRu(availableUntil)}
+        </p>
+      )}
+      {windowText && (
+        <p className={`rounded-lg border px-3 py-2 text-xs font-medium ${timeBlocked ? 'border-red-200 bg-red-50 text-red-600' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+          Приобрести можно на время {windowText}
+        </p>
+      )}
+    </>
+  );
 
   const renderServiceBookingTimePicker = () => {
     if (!requiresServiceBooking || !serviceBookingDate) return null;
@@ -588,6 +660,12 @@ export default function PurchaseModal() {
       if (serviceBookingBlocked) {
         throw new Error('Выберите свободное время услуги');
       }
+      if (mainTicketExpired || ticketExpired) {
+        throw new Error('Выбранный тариф недоступен на эту дату');
+      }
+      if (mainTicketTimeBlocked || ticketTimeBlocked) {
+        throw new Error('Выбранный тариф недоступен на это время');
+      }
       // Validate email
       if (email && !emailPattern.test(email)) {
         throw new Error('Введите корректный email');
@@ -602,13 +680,20 @@ export default function PurchaseModal() {
       }
 
       // Create order via WP checkout API and redirect to YooKassa
+      const requestId = checkoutRequestId || createCheckoutRequestId();
+      setCheckoutRequestId(requestId);
       const response = await fetch('/wp-json/termburg/v1/checkout/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Idempotency-Key': requestId,
           ...(localStorage.getItem('termburg_token') ? { Authorization: `Bearer ${localStorage.getItem('termburg_token')}` } : {}),
         },
         body: JSON.stringify({
+          idempotencyKey: requestId,
+          checkout_context: isTabletSalesMode ? 'tablet_sales' : '',
+          return_url: tabletReturnUrl,
+          cancel_url: tabletReturnUrl,
           name: effectivePurchaseName,
           amount: totalPrice,
           quantity: 1,
@@ -618,7 +703,10 @@ export default function PurchaseModal() {
           requires_visit_ticket: requiresVisitTicket,
           visit_ticket_amount: ticketPrice,
           visit_ticket_date: ticketDate,
+          visit_ticket_time: normalizedTicketTime,
           visit_ticket_tariff: ticketTariff,
+          checkout_date: isTicket ? visitDate : ticketDate,
+          checkout_time: isTicket ? normalizedVisitTime : normalizedTicketTime,
           service_booking_date: requiresServiceBooking ? serviceBookingDate : undefined,
           service_booking_start_hour: requiresServiceBooking ? Number(serviceHour) : undefined,
           service_booking_hours: requiresServiceBooking ? serviceReservedHours : undefined,
@@ -745,6 +833,17 @@ export default function PurchaseModal() {
     }, 300);
   }, [closeModal, defaultTariffId]);
 
+  const handleTabletFocus = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (!isTabletSalesMode) return;
+
+    const target = event.target as HTMLElement;
+    if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
+    window.setTimeout(() => {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 120);
+  };
+
   // Pre-fill data for authenticated users
   useEffect(() => {
     if (purchaseOpen && user) {
@@ -802,7 +901,9 @@ export default function PurchaseModal() {
         }
         if (!cancelled) {
           markPendingCheckoutConfirmed();
-          if (!isAuthenticated) {
+          if (isTabletSalesMode) {
+            clearPendingCheckout();
+          } else if (!isAuthenticated) {
             setGeneratedPassword(generatePassword());
           } else {
             clearPendingCheckout();
@@ -827,7 +928,7 @@ export default function PurchaseModal() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, isPaymentPreview, paymentReturn, purchaseOpen]);
+  }, [isAuthenticated, isPaymentPreview, isTabletSalesMode, paymentReturn, purchaseOpen]);
 
   // Check if can scroll down
   const checkScroll = useCallback(() => {
@@ -851,7 +952,6 @@ export default function PurchaseModal() {
     }
   }, [checkScroll, purchaseOpen, step]);
 
-  // Close on Escape
   useEffect(() => {
     if (!purchaseOpen) return;
     const handler = (e: KeyboardEvent) => {
@@ -861,11 +961,35 @@ export default function PurchaseModal() {
     return () => document.removeEventListener('keydown', handler);
   }, [purchaseOpen, handleClose]);
 
+  useEffect(() => {
+    if (!isTabletSalesMode || step !== 'success') return;
+
+    const timeout = window.setTimeout(() => {
+      handleClose();
+    }, 2600);
+
+    return () => window.clearTimeout(timeout);
+  }, [handleClose, isTabletSalesMode, step]);
+
   if (!purchaseOpen || !purchaseItem) return null;
+
+  if (isTabletSalesMode && step === 'success') {
+    return (
+      <div className="purchase-modal__tablet-success" role="status" aria-live="polite">
+        <div className="purchase-modal__tablet-success-icon">
+          <CheckCircle className="h-7 w-7 text-success" />
+        </div>
+        <div className="purchase-modal__tablet-success-content">
+          <div className="purchase-modal__tablet-success-title">Заказ оформлен</div>
+          <div className="purchase-modal__tablet-success-text">Оплата прошла успешно</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className={`fixed inset-0 z-[100] flex ${isTabletSalesMode ? 'items-stretch justify-center p-3 md:p-4' : 'items-center justify-center p-4'}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="purchase-title"
@@ -874,19 +998,20 @@ export default function PurchaseModal() {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         ref={scrollRef}
-        className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl"
+        className={`relative w-full overflow-y-auto bg-white shadow-2xl ${isTabletSalesMode ? 'purchase-modal purchase-modal--tablet max-w-3xl max-h-[calc(100dvh-24px)] rounded-3xl' : 'purchase-modal max-w-md max-h-[90vh] rounded-2xl'}`}
         onClick={(e) => e.stopPropagation()}
+        onFocusCapture={handleTabletFocus}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-white px-6 py-4 rounded-t-2xl">
-          <h2 id="purchase-title" className="font-heading text-xl font-bold text-text-primary">{modalText.title || 'Оформить заказ'}</h2>
+        <div className={`sticky top-0 z-10 flex items-center justify-between border-b border-border bg-white ${isTabletSalesMode ? 'px-7 py-5 rounded-t-3xl' : 'px-6 py-4 rounded-t-2xl'}`}>
+          <h2 id="purchase-title" className={`font-heading font-bold text-text-primary ${isTabletSalesMode ? 'text-2xl' : 'text-xl'}`}>{modalText.title || 'Оформить заказ'}</h2>
           <button onClick={handleClose} className="rounded-lg p-1.5 hover:bg-surface-warm transition-colors" aria-label="Закрыть">
             <X className="h-5 w-5 text-text-secondary" />
           </button>
         </div>
 
         {step === 'form' ? (
-          <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <form onSubmit={handleSubmit} className={isTabletSalesMode ? 'p-7 md:p-8 pb-10 space-y-6' : 'p-6 space-y-5'}>
             {/* Выбранная услуга */}
             <div className="rounded-xl bg-background border border-border px-5 py-4">
               <p className="font-medium text-text-primary">{effectivePurchaseName}</p>
@@ -909,6 +1034,7 @@ export default function PurchaseModal() {
 
             {/* Дата и время посещения */}
             {!isCertificate && (
+            <>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-text-secondary">
@@ -939,6 +1065,16 @@ export default function PurchaseModal() {
                 />
               </div>
             </div>
+            {isTicket && <div className="space-y-2">
+              {renderTariffMessages(
+                mainTicketNoticeLines,
+                mainTicketAvailableUntil,
+                mainTicketExpired,
+                mainTicketWindowText,
+                mainTicketTimeBlocked,
+              )}
+            </div>}
+            </>
             )}
 
             {/* Выбор количества для билетов */}
@@ -960,7 +1096,7 @@ export default function PurchaseModal() {
                       type="button"
                       onClick={() => setAdults(Math.max(1, adults - 1))}
                       disabled={adults <= 1}
-                      className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-surface-warm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="purchase-modal__counter-button w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-surface-warm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       <Minus className="w-4 h-4" />
                     </button>
@@ -968,7 +1104,7 @@ export default function PurchaseModal() {
                     <button
                       type="button"
                       onClick={() => setAdults(adults + 1)}
-                      className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-surface-warm transition-colors"
+                      className="purchase-modal__counter-button w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-surface-warm transition-colors"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -990,7 +1126,7 @@ export default function PurchaseModal() {
                         type="button"
                         onClick={() => setChildren(Math.max(0, children - 1))}
                         disabled={children <= 0}
-                        className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-surface-warm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="purchase-modal__counter-button w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-surface-warm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
                         <Minus className="w-4 h-4" />
                       </button>
@@ -998,7 +1134,7 @@ export default function PurchaseModal() {
                       <button
                         type="button"
                         onClick={() => setChildren(children + 1)}
-                        className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-surface-warm transition-colors"
+                        className="purchase-modal__counter-button w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-surface-warm transition-colors"
                       >
                         <Plus className="w-4 h-4" />
                       </button>
@@ -1052,6 +1188,23 @@ export default function PurchaseModal() {
                       />
                     </div>
 
+                    <div>
+                      <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-800">
+                        <Clock className="w-3.5 h-3.5" />
+                        {modalText.timeLabel || 'Время'}
+                      </label>
+                      <input
+                        type="time"
+                        required
+                        value={ticketTime}
+                        onChange={(e) => {
+                          setTicketTime(e.target.value);
+                          setFridayTime(isFridayWeekendTime(normalizeTimeValue(e.target.value)) ? 'after18' : 'before18');
+                        }}
+                        className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
+                      />
+                    </div>
+
                     {renderServiceBookingTimePicker()}
 
                     {/* Пятница: до/после 18:00 */}
@@ -1064,7 +1217,10 @@ export default function PurchaseModal() {
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => setFridayTime('before18')}
+                            onClick={() => {
+                              setTicketTime('09:00');
+                              setFridayTime('before18');
+                            }}
                             className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
                               fridayTime === 'before18'
                                 ? 'bg-primary text-white border-primary'
@@ -1076,7 +1232,10 @@ export default function PurchaseModal() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setFridayTime('after18')}
+                            onClick={() => {
+                              setTicketTime('18:00');
+                              setFridayTime('after18');
+                            }}
                             className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
                               fridayTime === 'after18'
                                 ? 'bg-primary text-white border-primary'
@@ -1112,6 +1271,15 @@ export default function PurchaseModal() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                    <div className="space-y-2">
+                      {renderTariffMessages(
+                        ticketNoticeLines,
+                        ticketAvailableUntil,
+                        ticketExpired,
+                        ticketWindowText,
+                        ticketTimeBlocked,
+                      )}
                     </div>
                   </div>
                 )}
@@ -1250,7 +1418,8 @@ export default function PurchaseModal() {
               items={checkoutLineItems}
               email={email}
               phone={phone}
-              onApplied={setPromoValidation}
+              checkoutRequestId={checkoutRequestId}
+              onApplied={handlePromoApplied}
             />
 
             {/* Итого */}
@@ -1272,7 +1441,7 @@ export default function PurchaseModal() {
             )}
 
             {/* Auth notice */}
-            {!isAuthenticated && (
+            {!isAuthenticated && !isTabletSalesMode && (
               <div className="rounded-xl bg-blue-50 border border-blue-200/60 px-4 py-3">
                 <p className="text-sm text-blue-800">
                   {modalText.authNotice || 'После оплаты вы сможете создать личный кабинет для отслеживания заказов.'}
@@ -1280,11 +1449,11 @@ export default function PurchaseModal() {
               </div>
             )}
 
-            <LegalConsents />
+            <LegalConsents linksDisabled={isTabletSalesMode} size={isTabletSalesMode ? 'large' : 'default'} />
             <button
               type="submit"
-              disabled={isSubmitting || serviceBookingBlocked}
-              className="w-full rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-primary-light active:brightness-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              disabled={submitBlocked}
+              className="purchase-modal__submit w-full rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-primary-light active:brightness-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <>
@@ -1324,7 +1493,11 @@ export default function PurchaseModal() {
                 Попробовать снова
               </button>
               <p className="text-sm text-text-secondary">
-                Или позвоните: <a href="tel:+79091674746" className="text-primary hover:underline">+7 (909) 167-47-46</a>
+                Или позвоните: {isTabletSalesMode ? (
+                  <span className="text-primary">+7 (909) 167-47-46</span>
+                ) : (
+                  <a href="tel:+79091674746" className="text-primary hover:underline">+7 (909) 167-47-46</a>
+                )}
               </p>
             </div>
           </div>
@@ -1335,10 +1508,11 @@ export default function PurchaseModal() {
             </div>
             <h3 className="mb-2 font-heading text-xl font-bold text-text-primary">Заказ оформлен!</h3>
             <p className="mb-6 text-text-secondary">
-              Оплата прошла успешно. Информация о заказе отправлена на ваш email.
+              {isTabletSalesMode
+                ? 'Оплата прошла успешно. Можно закрыть окно и оформить следующий заказ.'
+                : 'Оплата прошла успешно. Информация о заказе отправлена на ваш email.'}
             </p>
-            {/* Registration offer for non-authenticated users */}
-            {(!isAuthenticated || isPaymentPreview) && (
+            {(!isTabletSalesMode && (!isAuthenticated || isPaymentPreview)) && (
               <div className="mb-6 rounded-xl bg-primary/5 border border-primary/20 p-4 text-left">
                 <div className="flex items-center gap-2 mb-2">
                   <UserPlus className="h-5 w-5 text-primary" />
@@ -1348,7 +1522,6 @@ export default function PurchaseModal() {
                   Отслеживайте заказы, копите бонусы и получайте скидки постоянного клиента.
                 </p>
 
-                {/* Show generated password */}
                 <div className="mb-3">
                   <p className="text-xs text-text-secondary mb-1">Ваш пароль для входа:</p>
                   <div className="flex items-center gap-2">
@@ -1395,7 +1568,7 @@ export default function PurchaseModal() {
                 onClick={handleClose}
                 className="w-full rounded-xl bg-primary px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-primary-light"
               >
-                Закрыть
+                {isTabletSalesMode ? 'К следующему заказу' : 'Закрыть'}
               </button>
             </div>
           </div>

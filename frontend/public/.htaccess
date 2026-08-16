@@ -98,6 +98,9 @@ RewriteRule . /index.html [L]
 </IfModule>
 
 <IfModule mod_headers.c>
+  SetEnvIf Request_URI "^/tablet-sales/?$" termburg_tablet_sales_noindex=1
+  Header always set X-Robots-Tag "noindex, nofollow" env=termburg_tablet_sales_noindex
+
   # HTML не кешируем, чтобы всегда подтягивался свежий build/index.html или /route/index.html
   <FilesMatch "\.html$">
     Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"

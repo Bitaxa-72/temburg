@@ -22,6 +22,8 @@ export interface CheckoutLineItem {
   price: number;
   quantity?: number;
   duration?: string;
+  eventDate?: string;
+  eventTime?: string;
   serviceDate?: string;
   serviceStartHour?: number;
   reservedHours?: number;
@@ -42,6 +44,10 @@ export interface PurchaseItem {
   tariffId?: string;
   tariffLabel?: string;
   tariffPeriod?: 'weekday' | 'weekend';
+  availableUntil?: string;
+  noticeLines?: string[];
+  purchaseTimeFrom?: string;
+  purchaseTimeTo?: string;
   lineItems?: CheckoutLineItem[];
   certificate?: CertificateMeta;
 }

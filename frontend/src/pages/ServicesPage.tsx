@@ -383,7 +383,7 @@ export default function ServicesPage() {
 
           <button
             type="button"
-            onClick={() => openPurchase({ name: 'Абонемент', price: 'от 4 500 ₽' })}
+            onClick={openBooking}
             className="group rounded-2xl bg-surface border border-border/50 p-6 text-left hover:border-primary/30 transition-all duration-300"
           >
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">

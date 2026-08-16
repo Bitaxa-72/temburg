@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CheckoutLineItem } from '@/context/BookingContext';
+import { API_BASE } from '@/api/wordpress';
 
 interface PromoConfig {
   enabled: boolean;
@@ -24,10 +25,20 @@ interface PromoCodeFieldProps {
   items: CheckoutLineItem[];
   email: string;
   phone: string;
+  checkoutRequestId: string;
   onApplied: (validation: PromoValidation | null) => void;
 }
 
-export default function PromoCodeField({ items, email, phone, onApplied }: PromoCodeFieldProps) {
+function promoApiUrl(endpoint: string): string {
+  const apiBase = import.meta.env.VITE_PROMO_API_URL || API_BASE;
+  try {
+    return `${new URL(apiBase).origin}/wp-json/termburg-promocodes/v1${endpoint}`;
+  } catch {
+    return `/wp-json/termburg-promocodes/v1${endpoint}`;
+  }
+}
+
+export default function PromoCodeField({ items, email, phone, checkoutRequestId, onApplied }: PromoCodeFieldProps) {
   const [config, setConfig] = useState<PromoConfig | null>(null);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,14 +48,23 @@ export default function PromoCodeField({ items, email, phone, onApplied }: Promo
 
   useEffect(() => {
     let active = true;
-    fetch('/wp-json/termburg-promocodes/v1/checkout/config')
-      .then((response) => response.ok ? response.json() : null)
+    fetch(promoApiUrl('/checkout/config'))
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('');
+        }
+        return response.json();
+      })
       .then((data) => {
         if (active && data) {
           setConfig(data);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (active) {
+          setConfig(null);
+        }
+      });
     return () => {
       active = false;
     };
@@ -70,7 +90,7 @@ export default function PromoCodeField({ items, email, phone, onApplied }: Promo
     setError('');
 
     try {
-      const response = await fetch('/wp-json/termburg-promocodes/v1/validate', {
+      const response = await fetch(promoApiUrl('/validate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -80,6 +100,7 @@ export default function PromoCodeField({ items, email, phone, onApplied }: Promo
           items,
           email,
           phone,
+          checkoutRequestId,
         }),
       });
       const result = await response.json();
@@ -118,7 +139,7 @@ export default function PromoCodeField({ items, email, phone, onApplied }: Promo
       <div className="promo-code__controls">
         <input
           id="termburg-promo-code"
-          className="promo-code__input"
+          className="promo-code__input w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-colors"
           type="text"
           value={code}
           disabled={loading}

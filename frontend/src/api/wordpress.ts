@@ -19,6 +19,10 @@ export interface WPPricingItem {
   childPrice: number;
   discount: number | null;
   fridayWeekendAllDay?: boolean;
+  availableUntil?: string;
+  noticeLines?: string[];
+  purchaseTimeFrom?: string;
+  purchaseTimeTo?: string;
   description?: string;
   badge?: string;
   badgeVariant?: 'default' | 'gold' | 'success' | string;
@@ -802,6 +806,7 @@ export const api = {
 
   // Schedule
   getSchedule: () => fetchAPI<WPScheduleEvent[]>('/schedule'),
+  getTodaySchedule: () => fetchAPI<WPScheduleEvent[]>('/schedule?view=today'),
 
   // Promotions
   getPromotions: () => fetchAPI<WPPromotion[]>('/promotions-data'),

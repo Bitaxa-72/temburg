@@ -165,6 +165,8 @@ function EventRow({ event, showDays }: { event: ScheduleEvent; showDays?: boolea
               price: Number(event.price) || 0,
               quantity: 1,
               duration: event.duration,
+              eventDate: event.date,
+              eventTime: event.time,
               kind: 'event',
               productKey: catalogKey('event', event.id || event.name),
               productGroup: 'event',

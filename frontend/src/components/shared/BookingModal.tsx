@@ -4,14 +4,15 @@ import { useBooking, type CheckoutLineItem } from '@/context/BookingContext';
 import CertificateConfigurator from '@/components/shared/CertificateConfigurator';
 import LegalConsents from '@/components/shared/LegalConsents';
 import PromoCodeField, { type PromoValidation } from '@/components/shared/PromoCodeField';
-import { weekdayPricing as localWeekdayPricing, weekendPricing as localWeekendPricing, subscriptions as localSubscriptions, type PricingSlot, type Subscription } from '@/data/pricing';
+import { subscriptions as localSubscriptions, type PricingSlot, type Subscription } from '@/data/pricing';
 import { steamServices as localSteamServices, massageServices as localMassageServices, spaServices as localSpaServices, type ServiceItem } from '@/data/services';
 import { getApiUrl } from '@/api/wordpress';
 import { wpServiceItems } from '@/utils/wpServices';
-import { findPricingSlot, getDefaultTariffId, getTariffLabel, getTariffOptions, tariffUsesFridayWeekendAllDay } from '@/utils/pricingTariffs';
+import { findPricingSlot, formatDateRu, getDefaultTariffId, getTariffAvailableUntil, getTariffLabel, getTariffNoticeLines, getTariffOptions, getTariffTimeWindow, getTariffTimeWindowText, isDateAfter, isTimeOutsideTariffWindow, normalizeNoticeLines, normalizeTimeValue, tariffUsesFridayWeekendAllDay } from '@/utils/pricingTariffs';
 import { markPendingCheckoutConfirmed, savePendingCheckout } from '@/utils/paymentReturn';
 import { buildServiceBookingFallbackSlots, formatServiceBookingRange, getServiceBookingMinDate, getServiceReservedHours, normalizeServiceBookingSection, normalizeServiceBookingSlots, type ServiceBookingSlot } from '@/utils/serviceBooking';
 import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
+import { createCheckoutRequestId } from '@/utils/checkoutRequest';
 
 type BookingType = string;
 
@@ -40,6 +41,10 @@ function normalizePricingSlots(slots: PricingSlot[] | undefined): PricingSlot[] 
     adultPrice: Number(slot.adultPrice) || 0,
     childPrice: Number(slot.childPrice) || 0,
     fridayWeekendAllDay: Boolean(slot.fridayWeekendAllDay),
+    availableUntil: String(slot.availableUntil || ''),
+    noticeLines: normalizeNoticeLines(slot.noticeLines),
+    purchaseTimeFrom: normalizeTimeValue(slot.purchaseTimeFrom),
+    purchaseTimeTo: normalizeTimeValue(slot.purchaseTimeTo),
   }));
 }
 
@@ -109,6 +114,11 @@ function isFriday(dateStr: string) {
   return d.getDay() === 5;
 }
 
+function isFridayWeekendTime(timeStr: string) {
+  const [hours = '0', minutes = '0'] = timeStr.split(':');
+  return Number(hours) * 60 + Number(minutes) >= 18 * 60;
+}
+
 function isSpecialWeekendDate(dateStr: string, specialWeekendDates: Set<string>) {
   return dateStr !== '' && specialWeekendDates.has(dateStr);
 }
@@ -132,6 +142,13 @@ function getMaxDate() {
 
 export default function BookingModal() {
   const { bookingOpen, closeModal, openPurchase } = useBooking();
+  const [checkoutRequestId, setCheckoutRequestId] = useState('');
+
+  useEffect(() => {
+    if (bookingOpen) {
+      setCheckoutRequestId(createCheckoutRequestId());
+    }
+  }, [bookingOpen]);
 
   // Load certificate images from WP
   const [certImgs, setCertImgs] = useState(localCertImages);
@@ -153,7 +170,6 @@ export default function BookingModal() {
     return () => { active = false; };
   }, []);
 
-  // WP pricing data with local fallback
   const [wpPricing, setWpPricing] = useState<any>(null);
   const [wpServices, setWpServices] = useState<any>(null);
   useEffect(() => {
@@ -169,8 +185,8 @@ export default function BookingModal() {
     return () => { cancelled = true; };
   }, []);
   const hasWpPricing = wpPricing !== null;
-  const weekdayPricing: PricingSlot[] = hasWpPricing ? normalizePricingSlots(wpPricing.weekday) : localWeekdayPricing;
-  const weekendPricing: PricingSlot[] = hasWpPricing ? normalizePricingSlots(wpPricing.weekend) : localWeekendPricing;
+  const weekdayPricing: PricingSlot[] = normalizePricingSlots(wpPricing?.weekday);
+  const weekendPricing: PricingSlot[] = normalizePricingSlots(wpPricing?.weekend);
   const specialWeekendDates = useMemo(
     () => new Set<string>(Array.isArray(wpPricing?.specialWeekendDates) ? wpPricing.specialWeekendDates : []),
     [wpPricing]
@@ -227,6 +243,8 @@ export default function BookingModal() {
   const [canScrollDown, setCanScrollDown] = useState(false);
   const [showWhatToBring, setShowWhatToBring] = useState(false);
   const [fridayTime, setFridayTime] = useState<'before18' | 'after18'>('before18');
+  const [time, setTime] = useState('09:00');
+  const [visitTime, setVisitTime] = useState('09:00');
   const [addVisit, setAddVisit] = useState(false);
   const [visitTariff, setVisitTariff] = useState(defaultTariffId);
   const [visitDate, setVisitDate] = useState('');
@@ -300,27 +318,41 @@ export default function BookingModal() {
   // Расчёт стоимости посещения для услуг
   const mainVisitUsesFridayWeekendAllDay = tariffUsesFridayWeekendAllDay(tariffOptions, tariff, weekdayPricing, weekendPricing);
   const additionalVisitUsesFridayWeekendAllDay = tariffUsesFridayWeekendAllDay(tariffOptions, visitTariff, weekdayPricing, weekendPricing);
+  const normalizedTime = normalizeTimeValue(time) || '09:00';
+  const normalizedVisitTime = normalizeTimeValue(visitTime) || '09:00';
 
   const visitPrice = useMemo(() => {
     if (!addVisit || !visitDate) return 0;
     const useWeekendPricing = isSpecialWeekendDate(visitDate, specialWeekendDates)
       || isWeekend(visitDate)
-      || (isFriday(visitDate) && (additionalVisitUsesFridayWeekendAllDay || fridayTime === 'after18'));
+      || (isFriday(visitDate) && (additionalVisitUsesFridayWeekendAllDay || isFridayWeekendTime(normalizedVisitTime)));
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     const slot = findPricingSlot(pricing, visitTariff, tariffOptions);
     return slot?.adultPrice ?? 0;
-  }, [addVisit, visitDate, visitTariff, additionalVisitUsesFridayWeekendAllDay, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+  }, [addVisit, visitDate, visitTariff, additionalVisitUsesFridayWeekendAllDay, normalizedVisitTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
 
   const selectedVisitSlot = useMemo(() => {
     if (!date) return null;
     const useWeekendPricing = isSpecialWeekendDate(date, specialWeekendDates)
       || isWeekend(date)
-      || (isFriday(date) && (mainVisitUsesFridayWeekendAllDay || fridayTime === 'after18'));
+      || (isFriday(date) && (mainVisitUsesFridayWeekendAllDay || isFridayWeekendTime(normalizedTime)));
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     return findPricingSlot(pricing, tariff, tariffOptions);
-  }, [date, tariff, mainVisitUsesFridayWeekendAllDay, fridayTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+  }, [date, tariff, mainVisitUsesFridayWeekendAllDay, normalizedTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
   const selectedVisitLabel = getTariffLabel(tariffOptions, tariff) || tariff || 'Входной билет';
   const additionalVisitLabel = getTariffLabel(tariffOptions, visitTariff) || visitTariff || 'Входной билет';
+  const selectedVisitAvailableUntil = getTariffAvailableUntil(tariffOptions, tariff, weekdayPricing, weekendPricing);
+  const additionalVisitAvailableUntil = getTariffAvailableUntil(tariffOptions, visitTariff, weekdayPricing, weekendPricing);
+  const selectedVisitNoticeLines = getTariffNoticeLines(tariffOptions, tariff, weekdayPricing, weekendPricing);
+  const additionalVisitNoticeLines = getTariffNoticeLines(tariffOptions, visitTariff, weekdayPricing, weekendPricing);
+  const selectedVisitTimeWindow = getTariffTimeWindow(tariffOptions, tariff, weekdayPricing, weekendPricing);
+  const additionalVisitTimeWindow = getTariffTimeWindow(tariffOptions, visitTariff, weekdayPricing, weekendPricing);
+  const selectedVisitWindowText = getTariffTimeWindowText(selectedVisitTimeWindow);
+  const additionalVisitWindowText = getTariffTimeWindowText(additionalVisitTimeWindow);
+  const selectedVisitExpired = bookingType === 'visit' && isDateAfter(date, selectedVisitAvailableUntil);
+  const additionalVisitExpired = addVisit && isDateAfter(visitDate, additionalVisitAvailableUntil);
+  const selectedVisitTimeBlocked = bookingType === 'visit' && isTimeOutsideTariffWindow(normalizedTime, selectedVisitTimeWindow);
+  const additionalVisitTimeBlocked = addVisit && isTimeOutsideTariffWindow(normalizedVisitTime, additionalVisitTimeWindow);
 
   const selectedSteamService = useMemo(
     () => steamServices.find((s) => s.id === selectedSteam) ?? null,
@@ -361,6 +393,8 @@ export default function BookingModal() {
   );
   const serviceBookingBlocked = requiresServiceBooking
     && (!serviceBookingDate || !serviceHour || serviceSlotsLoading || Boolean(serviceSlotsError) || !selectedServiceSlot?.available);
+  const tariffRestrictionBlocked = selectedVisitExpired || selectedVisitTimeBlocked || additionalVisitExpired || additionalVisitTimeBlocked;
+  const submitBlocked = serviceBookingBlocked || tariffRestrictionBlocked;
   const selectedSubscription = useMemo(
     () => subscriptions.find((s) => s.id === selectedSub) ?? null,
     [subscriptions, selectedSub]
@@ -484,7 +518,7 @@ export default function BookingModal() {
     if (bookingType === 'visit' && selectedVisitSlot) {
       const visitPeriod = isSpecialWeekendDate(date, specialWeekendDates)
         || isWeekend(date)
-        || (isFriday(date) && (mainVisitUsesFridayWeekendAllDay || fridayTime === 'after18'))
+        || (isFriday(date) && (mainVisitUsesFridayWeekendAllDay || isFridayWeekendTime(normalizedTime)))
         ? 'weekend'
         : 'weekday';
       if (adults > 0 && selectedVisitSlot.adultPrice > 0) {
@@ -559,7 +593,7 @@ export default function BookingModal() {
     if (addVisit && visitPrice > 0) {
       const visitPeriod = isSpecialWeekendDate(visitDate, specialWeekendDates)
         || isWeekend(visitDate)
-        || (isFriday(visitDate) && (additionalVisitUsesFridayWeekendAllDay || fridayTime === 'after18'))
+        || (isFriday(visitDate) && (additionalVisitUsesFridayWeekendAllDay || isFridayWeekendTime(normalizedVisitTime)))
         ? 'weekend'
         : 'weekday';
       lines.push({
@@ -575,9 +609,49 @@ export default function BookingModal() {
     }
 
     return lines;
-  }, [bookingType, selectedVisitSlot, date, specialWeekendDates, mainVisitUsesFridayWeekendAllDay, fridayTime, selectedVisitLabel, adults, children, tariff, selectedServiceItem, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, selectedSubscription, certAmount, addVisit, visitPrice, visitDate, additionalVisitUsesFridayWeekendAllDay, additionalVisitLabel, visitTariff]);
+  }, [bookingType, selectedVisitSlot, date, specialWeekendDates, mainVisitUsesFridayWeekendAllDay, normalizedTime, selectedVisitLabel, adults, children, tariff, selectedServiceItem, requiresServiceBooking, serviceHour, serviceBookingDate, serviceReservedHours, serviceBookingSection, selectedSubscription, certAmount, addVisit, visitPrice, visitDate, additionalVisitUsesFridayWeekendAllDay, normalizedVisitTime, additionalVisitLabel, visitTariff]);
   const [promoValidation, setPromoValidation] = useState<PromoValidation | null>(null);
   const payableTotal = promoValidation?.totalAfterDiscount ?? total;
+  const handlePromoApplied = useCallback((nextPromoValidation: PromoValidation | null) => {
+    setPromoValidation(nextPromoValidation);
+    setCheckoutRequestId(createCheckoutRequestId());
+  }, []);
+
+  const handleMainTimeChange = (value: string) => {
+    setTime(value);
+    setFridayTime(isFridayWeekendTime(normalizeTimeValue(value)) ? 'after18' : 'before18');
+  };
+
+  const handleAdditionalTimeChange = (value: string) => {
+    setVisitTime(value);
+    setFridayTime(isFridayWeekendTime(normalizeTimeValue(value)) ? 'after18' : 'before18');
+  };
+
+  const renderTariffMessages = (
+    noticeLines: string[],
+    availableUntil: string,
+    expired: boolean,
+    windowText: string,
+    timeBlocked: boolean,
+  ) => (
+    <>
+      {noticeLines.map((line) => (
+        <p key={line} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+          {line}
+        </p>
+      ))}
+      {availableUntil && (
+        <p className={`rounded-lg border px-3 py-2 text-xs font-medium ${expired ? 'border-red-200 bg-red-50 text-red-600' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+          Доступно по {formatDateRu(availableUntil)}
+        </p>
+      )}
+      {windowText && (
+        <p className={`rounded-lg border px-3 py-2 text-xs font-medium ${timeBlocked ? 'border-red-200 bg-red-50 text-red-600' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+          Приобрести можно на время {windowText}
+        </p>
+      )}
+    </>
+  );
 
   const renderServiceBookingTimePicker = () => {
     if (!requiresServiceBooking || !serviceBookingDate) return null;
@@ -642,17 +716,27 @@ export default function BookingModal() {
       if (serviceBookingBlocked) {
         throw new Error('Выберите свободное время услуги');
       }
+      if (selectedVisitExpired || additionalVisitExpired) {
+        throw new Error('Выбранный тариф недоступен на эту дату');
+      }
+      if (selectedVisitTimeBlocked || additionalVisitTimeBlocked) {
+        throw new Error('Выбранный тариф недоступен на это время');
+      }
       if (serviceRequiresVisitTicket && (!selectedServiceItem || !addVisit || !visitDate || visitPrice <= 0)) {
         throw new Error('Для дополнительной услуги выберите тариф обязательного входного билета');
       }
       const orderName = bookingType === 'visit' ? `Входной билет (${getTariffLabel(tariffOptions, tariff) || tariff})` : activeAdditionalCategory ? getServiceOrderName(activeAdditionalService, selectedAdditionalService) : bookingType === 'steaming' ? getServiceOrderName(selectedSteamService, selectedSteam) : bookingType === 'massage' ? getServiceOrderName(selectedMassageService, selectedMassage) : bookingType === 'spa' ? getServiceOrderName(selectedSpaService, selectedSpa) : bookingType === 'certificate' ? `Сертификат ${certAmount} ₽` : `Абонемент`;
+      const requestId = checkoutRequestId || createCheckoutRequestId();
+      setCheckoutRequestId(requestId);
       const response = await fetch('/wp-json/termburg/v1/checkout/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Idempotency-Key': requestId,
           ...(localStorage.getItem('termburg_token') ? { Authorization: `Bearer ${localStorage.getItem('termburg_token')}` } : {}),
         },
         body: JSON.stringify({
+          idempotencyKey: requestId,
           name: orderName,
           amount: total,
           quantity: adults + children || 1,
@@ -662,7 +746,10 @@ export default function BookingModal() {
           requires_visit_ticket: serviceRequiresVisitTicket,
           visit_ticket_amount: visitPrice,
           visit_ticket_date: visitDate,
+          visit_ticket_time: normalizedVisitTime,
           visit_ticket_tariff: visitTariff,
+          checkout_date: bookingType === 'visit' ? date : visitDate,
+          checkout_time: bookingType === 'visit' ? normalizedTime : normalizedVisitTime,
           service_booking_date: requiresServiceBooking ? serviceBookingDate : undefined,
           service_booking_start_hour: requiresServiceBooking ? Number(serviceHour) : undefined,
           service_booking_hours: requiresServiceBooking ? serviceReservedHours : undefined,
@@ -832,7 +919,7 @@ export default function BookingModal() {
                       <div className="flex gap-2">
                         <button
                           type="button"
-                          onClick={() => setFridayTime('before18')}
+                          onClick={() => handleMainTimeChange('09:00')}
                           className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
                             fridayTime === 'before18'
                               ? 'bg-primary text-white'
@@ -844,7 +931,7 @@ export default function BookingModal() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setFridayTime('after18')}
+                          onClick={() => handleMainTimeChange('18:00')}
                           className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
                             fridayTime === 'after18'
                               ? 'bg-accent text-white'
@@ -857,6 +944,20 @@ export default function BookingModal() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-text-secondary">
+                    <Clock className="h-4 w-4" />
+                    {modalText.timeLabel || 'Время'}
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={time}
+                    onChange={(e) => handleMainTimeChange(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-text-primary focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-colors"
+                  />
                 </div>
 
                 {/* Тариф */}
@@ -877,6 +978,15 @@ export default function BookingModal() {
                         {opt.label}
                       </button>
                     ))}
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {renderTariffMessages(
+                      selectedVisitNoticeLines,
+                      selectedVisitAvailableUntil,
+                      selectedVisitExpired,
+                      selectedVisitWindowText,
+                      selectedVisitTimeBlocked,
+                    )}
                   </div>
                 </div>
 
@@ -975,10 +1085,14 @@ export default function BookingModal() {
                         <input type="date" required min={serviceVisitMinDate} value={visitDate} onChange={(e) => setVisitDate(e.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none" />
                         {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && !additionalVisitUsesFridayWeekendAllDay && (
                           <div className="mt-2 flex gap-2">
-                            <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
-                            <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
+                            <button type="button" onClick={() => handleAdditionalTimeChange('09:00')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
+                            <button type="button" onClick={() => handleAdditionalTimeChange('18:00')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
                           </div>
                         )}
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.timeLabel || 'Время'}</label>
+                        <input type="time" required value={visitTime} onChange={(e) => handleAdditionalTimeChange(e.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none" />
                       </div>
                       <div>
                         <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.tariffLabel || 'Тариф'}</label>
@@ -987,6 +1101,15 @@ export default function BookingModal() {
                             <button key={opt.id} type="button" onClick={() => setVisitTariff(opt.id)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${visitTariff === opt.id ? 'bg-primary text-white' : 'bg-background text-text-secondary hover:bg-border'}`}>{opt.label}</button>
                           ))}
                         </div>
+                      </div>
+                      <div className="space-y-2">
+                        {renderTariffMessages(
+                          additionalVisitNoticeLines,
+                          additionalVisitAvailableUntil,
+                          additionalVisitExpired,
+                          additionalVisitWindowText,
+                          additionalVisitTimeBlocked,
+                        )}
                       </div>
                       {visitDate && visitPrice > 0 && <p className="text-xs text-text-secondary">Входной билет: <strong className="text-primary">{visitPrice.toLocaleString('ru-RU')} ₽</strong></p>}
                     </div>
@@ -1048,10 +1171,14 @@ export default function BookingModal() {
                         />
                         {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && !additionalVisitUsesFridayWeekendAllDay && (
                           <div className="mt-2 flex gap-2">
-                            <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
-                            <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
+                            <button type="button" onClick={() => handleAdditionalTimeChange('09:00')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
+                            <button type="button" onClick={() => handleAdditionalTimeChange('18:00')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
                           </div>
                         )}
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.timeLabel || 'Время'}</label>
+                        <input type="time" required value={visitTime} onChange={(e) => handleAdditionalTimeChange(e.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none" />
                       </div>
                       <div>
                         <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.tariffLabel || 'Тариф'}</label>
@@ -1065,6 +1192,33 @@ export default function BookingModal() {
                             <button key={opt.id} type="button" onClick={() => setVisitTariff(opt.id)} className={`rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${visitTariff === opt.id ? 'bg-primary text-white' : 'bg-background text-text-secondary hover:bg-border'}`}>{opt.label}</button>
                           ))}
                         </div>
+                      </div>
+                      <div className="space-y-2">
+                        {renderTariffMessages(
+                          additionalVisitNoticeLines,
+                          additionalVisitAvailableUntil,
+                          additionalVisitExpired,
+                          additionalVisitWindowText,
+                          additionalVisitTimeBlocked,
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {renderTariffMessages(
+                          additionalVisitNoticeLines,
+                          additionalVisitAvailableUntil,
+                          additionalVisitExpired,
+                          additionalVisitWindowText,
+                          additionalVisitTimeBlocked,
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {renderTariffMessages(
+                          additionalVisitNoticeLines,
+                          additionalVisitAvailableUntil,
+                          additionalVisitExpired,
+                          additionalVisitWindowText,
+                          additionalVisitTimeBlocked,
+                        )}
                       </div>
                       {visitDate && visitPrice > 0 && (
                         <p className="text-xs text-text-secondary">Посещение: <strong className="text-primary">{visitPrice.toLocaleString('ru-RU')} ₽</strong></p>
@@ -1128,10 +1282,14 @@ export default function BookingModal() {
                         />
                         {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && !additionalVisitUsesFridayWeekendAllDay && (
                           <div className="mt-2 flex gap-2">
-                            <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
-                            <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
+                            <button type="button" onClick={() => handleAdditionalTimeChange('09:00')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
+                            <button type="button" onClick={() => handleAdditionalTimeChange('18:00')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
                           </div>
                         )}
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.timeLabel || 'Время'}</label>
+                        <input type="time" required value={visitTime} onChange={(e) => handleAdditionalTimeChange(e.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none" />
                       </div>
                       <div>
                         <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.tariffLabel || 'Тариф'}</label>
@@ -1208,10 +1366,14 @@ export default function BookingModal() {
                         />
                         {visitDate && isFriday(visitDate) && !isSpecialWeekendDate(visitDate, specialWeekendDates) && !additionalVisitUsesFridayWeekendAllDay && (
                           <div className="mt-2 flex gap-2">
-                            <button type="button" onClick={() => setFridayTime('before18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
-                            <button type="button" onClick={() => setFridayTime('after18')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
+                            <button type="button" onClick={() => handleAdditionalTimeChange('09:00')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'before18' ? 'bg-primary text-white' : 'bg-background text-text-secondary'}`}>До 18:00</button>
+                            <button type="button" onClick={() => handleAdditionalTimeChange('18:00')} className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${fridayTime === 'after18' ? 'bg-accent text-white' : 'bg-background text-text-secondary'}`}>После 18:00</button>
                           </div>
                         )}
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.timeLabel || 'Время'}</label>
+                        <input type="time" required value={visitTime} onChange={(e) => handleAdditionalTimeChange(e.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none" />
                       </div>
                       <div>
                         <label className="mb-1.5 block text-xs font-medium text-text-secondary">{modalText.tariffLabel || 'Тариф'}</label>
@@ -1334,7 +1496,8 @@ export default function BookingModal() {
                 items={checkoutLineItems}
                 email={email}
                 phone={phone}
-                onApplied={setPromoValidation}
+                checkoutRequestId={checkoutRequestId}
+                onApplied={handlePromoApplied}
               />
             )}
 
@@ -1350,7 +1513,7 @@ export default function BookingModal() {
                 {bookingType === 'visit' && date && (
                   <p className="mt-1 text-xs text-text-secondary">
                     {adults} взр.{children > 0 ? ` + ${children} дет.` : ''} &middot;{' '}
-                    {isSpecialWeekendDate(date, specialWeekendDates) || isWeekend(date) || (isFriday(date) && (mainVisitUsesFridayWeekendAllDay || fridayTime === 'after18')) ? 'выходной' : 'будни'} &middot;{' '}
+                    {isSpecialWeekendDate(date, specialWeekendDates) || isWeekend(date) || (isFriday(date) && (mainVisitUsesFridayWeekendAllDay || isFridayWeekendTime(normalizedTime))) ? 'выходной' : 'будни'} &middot;{' '}
                     {getTariffLabel(tariffOptions, tariff)}
                   </p>
                 )}
@@ -1368,7 +1531,7 @@ export default function BookingModal() {
                 <LegalConsents />
                 <button
                   type="submit"
-                  disabled={serviceBookingBlocked}
+                  disabled={submitBlocked}
                   className="w-full rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-primary-light active:brightness-90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {modalText.submitLabel || 'Оплатить мою порцию счастья'}

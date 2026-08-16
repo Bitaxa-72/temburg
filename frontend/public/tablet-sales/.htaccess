@@ -1,0 +1,3 @@
+<IfModule mod_headers.c>
+  Header always set Set-Cookie "termburg_checkout_context=; Path=/; Max-Age=0; SameSite=Lax"
+</IfModule>

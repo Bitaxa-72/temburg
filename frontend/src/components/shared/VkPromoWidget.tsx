@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Gift, MessageCircle, X } from 'lucide-react';
 
-const WIDGET_STORAGE_KEY = 'termburg_vk_promo_widget_dismissed_at';
-const DISMISS_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-
 interface VkPromoWidgetConfig {
   enabled: boolean;
   delay: number;
@@ -53,11 +50,6 @@ export default function VkPromoWidget({ hidden = false }: VkPromoWidgetProps) {
     let active = true;
     let timer: number | undefined;
     const controller = new AbortController();
-    const dismissedAt = Number(localStorage.getItem(WIDGET_STORAGE_KEY) || 0);
-
-    if (dismissedAt && Date.now() - dismissedAt < DISMISS_TIMEOUT_MS) {
-      return () => controller.abort();
-    }
 
     const showFromConfig = (nextConfig: VkPromoWidgetConfig | null) => {
       if (!active || !nextConfig?.enabled || !nextConfig.url) {
@@ -87,12 +79,10 @@ export default function VkPromoWidget({ hidden = false }: VkPromoWidgetProps) {
   }, []);
 
   const closeWidget = () => {
-    localStorage.setItem(WIDGET_STORAGE_KEY, String(Date.now()));
     setVisible(false);
   };
 
   const openVk = () => {
-    localStorage.setItem(WIDGET_STORAGE_KEY, String(Date.now()));
     if (config?.url) {
       window.open(config.url, '_blank', 'noopener,noreferrer');
     }

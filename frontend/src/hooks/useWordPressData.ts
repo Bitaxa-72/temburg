@@ -392,6 +392,10 @@ export function useSchedule() {
   return useAPI<WPScheduleEvent[]>(api.getSchedule, []);
 }
 
+export function useTodaySchedule() {
+  return useAPI<WPScheduleEvent[]>(api.getTodaySchedule, []);
+}
+
 // Promotions hook
 export function usePromotions() {
   return useAPI<WPPromotion[]>(api.getPromotions, []);

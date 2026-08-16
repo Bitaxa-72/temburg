@@ -1,0 +1,4 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^$ /wp-json/termburg/v1/checkout/yookassa-return [R=302,L,QSA]
+</IfModule>

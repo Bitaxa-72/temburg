@@ -103,6 +103,10 @@ export function getPaymentReturnParams(): PaymentReturnParams | null {
     return { orderId, orderKey, status: 'success' };
   }
 
+  if (payment === 'cancelled') {
+    return { orderId, orderKey, status: 'cancelled' };
+  }
+
   return null;
 }
 

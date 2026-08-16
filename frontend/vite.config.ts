@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import legacy from '@vitejs/plugin-legacy';
 import path from 'path';
 import fs from 'fs';
 import type { Plugin } from 'vite';
@@ -36,7 +37,15 @@ function imageFallbackPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), imageFallbackPlugin()],
+  plugins: [
+    react(),
+    legacy({
+      targets: ['Chrome >= 61', 'Android >= 8', 'Safari >= 11'],
+      modernPolyfills: true,
+      renderLegacyChunks: true,
+    }),
+    imageFallbackPlugin(),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

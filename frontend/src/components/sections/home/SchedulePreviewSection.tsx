@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import { useBooking } from '@/context/BookingContext';
-import { useSchedule } from '@/hooks/useWordPressData';
+import { useTodaySchedule } from '@/hooks/useWordPressData';
 import { mapScheduleData } from '@/utils/scheduleData';
 import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
 
@@ -25,7 +25,7 @@ function isSanitaryScheduleEvent(event: { type?: string; closed?: boolean; sanit
 const SchedulePreviewSection = memo(function SchedulePreviewSection() {
   const { openPurchase } = useBooking();
   const navigate = useNavigate();
-  const { data: wpSchedule, loading } = useSchedule();
+  const { data: wpSchedule, loading } = useTodaySchedule();
   const scheduleEvents = mapScheduleData(wpSchedule);
   const todayName = getCurrentDayName();
   const today = formatDateKey(new Date());
@@ -73,6 +73,8 @@ const SchedulePreviewSection = memo(function SchedulePreviewSection() {
                       price: Number(event.price) || 0,
                       quantity: 1,
                       duration: event.duration,
+                      eventDate: event.date,
+                      eventTime: event.time,
                       kind: 'event',
                       productKey: catalogKey('event', event.id || event.name),
                       productGroup: 'event',
@@ -97,6 +99,9 @@ const SchedulePreviewSection = memo(function SchedulePreviewSection() {
                   {isSpecial && '🌲 '}
                   {event.name}
                 </h4>
+                {event.location && (
+                  <p className="mt-0.5 text-xs text-white/70 truncate">{event.location}</p>
+                )}
                 <p className="text-xs text-white/50">{event.duration}</p>
               </div>
               {canPurchase ? (

@@ -5,6 +5,10 @@ export interface TariffPricingSlot {
   adultPrice: number;
   childPrice: number;
   fridayWeekendAllDay?: boolean;
+  availableUntil?: string;
+  noticeLines?: string[];
+  purchaseTimeFrom?: string;
+  purchaseTimeTo?: string;
 }
 
 export interface TariffOption {
@@ -13,6 +17,10 @@ export interface TariffOption {
   duration: number;
   durationText: string;
   fridayWeekendAllDay?: boolean;
+  availableUntil?: string;
+  noticeLines: string[];
+  purchaseTimeFrom: string;
+  purchaseTimeTo: string;
 }
 
 function normalizeText(value: unknown) {
@@ -66,10 +74,130 @@ export function getTariffOptions(...groups: Array<TariffPricingSlot[] | undefine
       duration: parseDurationMinutes(durationText || label),
       durationText,
       fridayWeekendAllDay: Boolean(slot.fridayWeekendAllDay),
+      availableUntil: normalizeDateValue(slot.availableUntil),
+      noticeLines: normalizeNoticeLines(slot.noticeLines),
+      purchaseTimeFrom: normalizeTimeValue(slot.purchaseTimeFrom),
+      purchaseTimeTo: normalizeTimeValue(slot.purchaseTimeTo),
     });
   });
 
   return options;
+}
+
+export function normalizeNoticeLines(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeText).filter(Boolean);
+  }
+
+  return normalizeText(value)
+    .split(/\r?\n/)
+    .map(normalizeText)
+    .filter(Boolean);
+}
+
+export function normalizeTimeValue(value: unknown) {
+  const match = normalizeText(value).match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return '';
+
+  return `${match[1].padStart(2, '0')}:${match[2]}`;
+}
+
+export function getTariffNoticeLines(
+  options: TariffOption[],
+  tariffId: string,
+  ...groups: Array<TariffPricingSlot[] | undefined>
+) {
+  const option = options.find((item) => item.id === tariffId);
+  if (option?.noticeLines.length) return option.noticeLines;
+
+  return groups
+    .flatMap((group) => group ?? [])
+    .map((slot) => normalizeNoticeLines(findPricingSlot([slot], tariffId, options)?.noticeLines))
+    .find((lines) => lines.length > 0) ?? [];
+}
+
+export function getTariffTimeWindow(
+  options: TariffOption[],
+  tariffId: string,
+  ...groups: Array<TariffPricingSlot[] | undefined>
+) {
+  const option = options.find((item) => item.id === tariffId);
+  if (option && (option.purchaseTimeFrom || option.purchaseTimeTo)) {
+    return {
+      from: option.purchaseTimeFrom,
+      to: option.purchaseTimeTo,
+    };
+  }
+
+  for (const slot of groups.flatMap((group) => group ?? [])) {
+    const matched = findPricingSlot([slot], tariffId, options);
+    const from = normalizeTimeValue(matched?.purchaseTimeFrom);
+    const to = normalizeTimeValue(matched?.purchaseTimeTo);
+    if (from || to) {
+      return { from, to };
+    }
+  }
+
+  return { from: '', to: '' };
+}
+
+export function getTariffTimeWindowText(window: { from: string; to: string }) {
+  if (window.from && window.to) return `с ${window.from} до ${window.to}`;
+  if (window.from) return `с ${window.from}`;
+  if (window.to) return `до ${window.to}`;
+  return '';
+}
+
+export function isTimeOutsideTariffWindow(time: string, window: { from: string; to: string }) {
+  const normalizedTime = normalizeTimeValue(time);
+  if (!normalizedTime || (!window.from && !window.to)) return false;
+
+  return (window.from !== '' && normalizedTime < window.from)
+    || (window.to !== '' && normalizedTime > window.to);
+}
+
+export function normalizeDateValue(value: unknown) {
+  const text = normalizeText(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+export function isDateAfter(date: string, limit: string) {
+  const checkedDate = normalizeDateValue(date);
+  const checkedLimit = normalizeDateValue(limit);
+  return checkedDate !== '' && checkedLimit !== '' && checkedDate > checkedLimit;
+}
+
+export function formatDateRu(date: string) {
+  const normalized = normalizeDateValue(date);
+  if (!normalized) return date;
+
+  const [year, month, day] = normalized.split('-');
+  return `${day}.${month}.${year}`;
+}
+
+export function getTariffAvailableUntil(
+  options: TariffOption[],
+  tariffId: string,
+  ...groups: Array<TariffPricingSlot[] | undefined>
+) {
+  const option = options.find((item) => item.id === tariffId);
+  if (option?.availableUntil) return option.availableUntil;
+
+  return groups
+    .flatMap((group) => group ?? [])
+    .map((slot) => findPricingSlot([slot], tariffId, options)?.availableUntil)
+    .map(normalizeDateValue)
+    .find(Boolean) ?? '';
+}
+
+export function isTariffAvailableForDate(
+  options: TariffOption[],
+  tariffId: string,
+  date: string,
+  ...groups: Array<TariffPricingSlot[] | undefined>
+) {
+  const availableUntil = getTariffAvailableUntil(options, tariffId, ...groups);
+  return !isDateAfter(date, availableUntil);
 }
 
 export function getDefaultTariffId(options: TariffOption[]) {

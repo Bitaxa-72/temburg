@@ -8,12 +8,9 @@ import CertificateConfigurator from '@/components/shared/CertificateConfigurator
 import { useBooking } from '@/context/BookingContext';
 import { usePricing } from '@/hooks/useWordPressData';
 import { getTariffOptionId } from '@/utils/pricingTariffs';
+import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
 import {
-  weekdayPricing,
-  weekendPricing,
   subscriptions,
-  pensionerPricing,
-  childUnder6Price as fallbackChildUnder6,
 } from '@/data/pricing';
 
 function getLocalDateString() {
@@ -30,15 +27,9 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
   const content = wpPricing.pricingContent ?? {};
   const useStaticPricing = !!error;
 
-  const weekdaySlots = useStaticPricing
-    ? weekdayPricing
-    : (wpPricing.weekday || []).map((slot) => ({ ...slot, id: String(slot.id) }));
-  const weekendSlots = useStaticPricing
-    ? weekendPricing
-    : (wpPricing.weekend || []).map((slot) => ({ ...slot, id: String(slot.id) }));
-  const pensionerSlots = useStaticPricing
-    ? pensionerPricing
-    : (wpPricing.pensioner || []).map((slot) => ({ ...slot, id: String(slot.id) }));
+  const weekdaySlots = (wpPricing.weekday || []).map((slot) => ({ ...slot, id: String(slot.id) }));
+  const weekendSlots = (wpPricing.weekend || []).map((slot) => ({ ...slot, id: String(slot.id) }));
+  const pensionerSlots = (wpPricing.pensioner || []).map((slot) => ({ ...slot, id: String(slot.id) }));
   const subscriptionSlots = useStaticPricing
     ? subscriptions.slice(0, 4).map((slot) => ({ ...slot, period: slot.period }))
     : (wpPricing.subscriptions || []).slice(0, 4).map((slot) => ({
@@ -50,7 +41,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
         description: slot.description ?? '',
       }));
 
-  const childUnder6Price = wpPricing.childUnder6 ?? fallbackChildUnder6;
+  const childUnder6Price = wpPricing.childUnder6 ?? 0;
   const today = getLocalDateString();
   const specialWeekendDates = Array.isArray(wpPricing.specialWeekendDates) ? wpPricing.specialWeekendDates : [];
   const isSpecialWeekendToday = specialWeekendDates.includes(today);
@@ -102,6 +93,10 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
                           tariffId: getTariffOptionId(slot),
                           tariffLabel: slot.name,
                           tariffPeriod: isSpecialWeekendToday ? 'weekend' : 'weekday',
+                          availableUntil: slot.availableUntil,
+                          noticeLines: slot.noticeLines,
+                          purchaseTimeFrom: slot.purchaseTimeFrom,
+                          purchaseTimeTo: slot.purchaseTimeTo,
                         })}
                       >
                         <span className="min-w-0 text-text-primary break-words">{slot.name}</span>
@@ -131,6 +126,10 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
                           tariffId: getTariffOptionId(slot),
                           tariffLabel: slot.name,
                           tariffPeriod: 'weekend',
+                          availableUntil: slot.availableUntil,
+                          noticeLines: slot.noticeLines,
+                          purchaseTimeFrom: slot.purchaseTimeFrom,
+                          purchaseTimeTo: slot.purchaseTimeTo,
                         })}
                       >
                         <span className="min-w-0 text-text-primary break-words">{slot.name}</span>
@@ -196,7 +195,20 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
                   className="rounded-xl bg-surface border border-border px-5 py-4 hover:border-primary/40 hover:shadow-md transition-all cursor-pointer"
                   role="button"
                   tabIndex={0}
-                  onClick={() => openPurchase({ name: `Абонемент «${sub.name}»`, price: `${sub.adultPrice.toLocaleString('ru-RU')} ₽` })}
+                  onClick={() => openPurchase({
+                    name: `Абонемент «${sub.name}»`,
+                    price: `${sub.adultPrice.toLocaleString('ru-RU')} ₽`,
+                    lineItems: [{
+                      name: `Абонемент «${sub.name}»`,
+                      price: sub.adultPrice,
+                      quantity: 1,
+                      kind: 'subscription',
+                      productKey: catalogKey('subscription', sub.id || sub.name),
+                      productGroup: 'subscription',
+                      source: 'pricing.subscriptions',
+                      sourceId: catalogSourceId(sub.id || sub.name),
+                    }],
+                  })}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <h4 className="font-bold text-text-primary">{sub.name}</h4>

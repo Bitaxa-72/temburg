@@ -9,7 +9,6 @@ import * as wpApi from '../services/wordpress-api';
 // Static data imports (existing data files)
 import { promotions as staticPromotions } from '../data/promotions';
 import { scheduleEvents as staticSchedule } from '../data/schedule';
-import { weekdayPricing, weekendPricing } from '../data/pricing';
 import { bathTypes as staticZones } from '../data/thermalZones';
 import { defaultEmployeesOfMonth as staticTeam } from '../data/employees';
 import { cafeMenu as staticCafeMenu } from '../data/cafe';
@@ -175,26 +174,8 @@ export function useTeamWithFallback() {
  */
 export function usePricingWithFallback() {
   const staticPricing: wpApi.PricingData = {
-    weekday: weekdayPricing.map(p => ({
-      id: 0,
-      name: p.name,
-      duration: p.duration,
-      adultPrice: p.adultPrice,
-      childPrice: p.childPrice,
-      discount: null,
-      fridayWeekendAllDay: p.fridayWeekendAllDay,
-      description: '',
-    })),
-    weekend: weekendPricing.map(p => ({
-      id: 0,
-      name: p.name,
-      duration: p.duration,
-      adultPrice: p.adultPrice,
-      childPrice: p.childPrice,
-      discount: null,
-      fridayWeekendAllDay: p.fridayWeekendAllDay,
-      description: '',
-    })),
+    weekday: [],
+    weekend: [],
     subscriptions: [],
     certificates: [],
   };

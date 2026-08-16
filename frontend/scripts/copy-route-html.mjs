@@ -21,13 +21,21 @@ const seoConfigSource = fs.readFileSync(seoConfigPath, 'utf8');
 const seoRoutes = [...seoConfigSource.matchAll(/^\s*'((?:\/[^']*)?)'\s*:/gm)]
   .map((match) => match[1])
   .filter((route) => route && route !== '/');
-const technicalRoutes = ['/yookassa/returnUrl'];
+const technicalRoutes = ['/tablet-sales', '/service-manager', '/yookassa/returnUrl', '/soglasie-na-obrabotku-personalnyh-dannyh'];
 const routes = [...new Set([...seoRoutes, ...technicalRoutes])];
+
+function tabletLegacyHtml(source) {
+  return source
+    .replace(/\s*<script type="module"[\s\S]*?<\/script>/g, '')
+    .replace(/\s*<script nomodule>[\s\S]*?<\/script>/g, '')
+    .replace(/<script nomodule crossorigin id="vite-legacy-polyfill"/g, '<script crossorigin id="vite-legacy-polyfill"')
+    .replace(/<script nomodule crossorigin id="vite-legacy-entry"/g, '<script crossorigin id="vite-legacy-entry"');
+}
 
 for (const route of routes) {
   const outputPath = path.join(buildDir, route.replace(/^\//, ''), 'index.html');
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, html);
+  fs.writeFileSync(outputPath, route === '/tablet-sales' ? tabletLegacyHtml(html) : html);
 }
 
 console.log(`Copied SPA index.html to ${routes.length} route folders.`);

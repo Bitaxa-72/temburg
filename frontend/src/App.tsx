@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import ScrollToTop from '@/components/shared/ScrollToTop';
 import ScrollToTopButton from '@/components/shared/ScrollToTopButton';
 import CookieConsent from '@/components/shared/CookieConsent';
@@ -47,6 +47,8 @@ const SteamRoomsPage = lazy(() => import('@/pages/SteamRoomsPage'));
 const PlungePoolsPage = lazy(() => import('@/pages/PlungePoolsPage'));
 const JacuzziPage = lazy(() => import('@/pages/JacuzziPage'));
 const YooKassaReturnPage = lazy(() => import('@/pages/YooKassaReturnPage'));
+const TabletSalesPage = lazy(() => import('@/pages/TabletSalesPage'));
+const ServiceManagerPage = lazy(() => import('@/pages/ServiceManagerPage'));
 
 function LoadingFallback() {
   return (
@@ -57,6 +59,7 @@ function LoadingFallback() {
 }
 
 export default function App() {
+  const location = useLocation();
   const {
     bookingOpen,
     purchaseOpen,
@@ -69,6 +72,9 @@ export default function App() {
     closeModal
   } = useBooking();
   const modalOpen = bookingOpen || purchaseOpen || bathDetailOpen || whatToBringOpen || clayModalOpen || swimmingEnrollmentOpen || searchOpen;
+  const isTabletSalesPage = location.pathname === '/tablet-sales';
+  const isServiceManagerPage = location.pathname === '/service-manager';
+  const isUtilityPage = isTabletSalesPage || isServiceManagerPage;
 
   // Preload WordPress image mapping for faster image resolution
   useImagePreloader();
@@ -76,6 +82,9 @@ export default function App() {
   // Global keyboard shortcut for search: Ctrl+K or Cmd+K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTabletSalesPage) {
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         openSearch();
@@ -84,47 +93,47 @@ export default function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [openSearch]);
+  }, [isTabletSalesPage, openSearch]);
 
   return (
     <>
       <ScrollToTop />
-      <ScrollToTopButton />
-      <CookieConsent />
-      <VkPromoWidget hidden={modalOpen} />
+      {!isUtilityPage && <ScrollToTopButton />}
+      {!isUtilityPage && <CookieConsent />}
+      <VkPromoWidget hidden={modalOpen || isUtilityPage} />
 
       {/* Lazy-loaded modals - only render when opened */}
-      {bookingOpen && (
+      {bookingOpen && !isServiceManagerPage && (
         <Suspense fallback={null}>
           <BookingModal />
         </Suspense>
       )}
-      {purchaseOpen && (
+      {purchaseOpen && !isServiceManagerPage && (
         <Suspense fallback={null}>
           <PurchaseModal />
         </Suspense>
       )}
-      {bathDetailOpen && (
+      {bathDetailOpen && !isServiceManagerPage && (
         <Suspense fallback={null}>
           <BathDetailModal />
         </Suspense>
       )}
-      {whatToBringOpen && (
+      {whatToBringOpen && !isServiceManagerPage && (
         <Suspense fallback={null}>
           <WhatToBringModal isOpen={whatToBringOpen} onClose={closeModal} />
         </Suspense>
       )}
-      {clayModalOpen && (
+      {clayModalOpen && !isServiceManagerPage && (
         <Suspense fallback={null}>
           <ClayModal isOpen={clayModalOpen} onClose={closeModal} />
         </Suspense>
       )}
-      {swimmingEnrollmentOpen && (
+      {swimmingEnrollmentOpen && !isServiceManagerPage && (
         <Suspense fallback={null}>
           <SwimmingEnrollmentModal />
         </Suspense>
       )}
-      {searchOpen && (
+      {searchOpen && !isServiceManagerPage && (
         <Suspense fallback={null}>
           <SearchModal isOpen={searchOpen} onClose={closeModal} />
         </Suspense>
@@ -162,6 +171,8 @@ export default function App() {
           <Route path="/jacuzzi" element={<JacuzziPage />} />
           <Route path="/plunge-pools" element={<PlungePoolsPage />} />
           <Route path="/yookassa/returnUrl" element={<YooKassaReturnPage />} />
+          <Route path="/tablet-sales" element={<TabletSalesPage />} />
+          <Route path="/service-manager" element={<ServiceManagerPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>

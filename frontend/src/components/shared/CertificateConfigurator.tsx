@@ -174,6 +174,8 @@ type Props = {
   submitLabel?: string;
   showDescription?: boolean;
   showPreview?: boolean;
+  compact?: boolean;
+  tabletMode?: boolean;
 };
 
 const CertificateConfigurator = memo(function CertificateConfigurator({
@@ -181,6 +183,8 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
   submitLabel,
   showDescription = true,
   showPreview = true,
+  compact = false,
+  tabletMode = false,
 }: Props) {
   const [, setWpCertsLoaded] = useState(false);
   useEffect(() => {
@@ -503,8 +507,8 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
   );
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10 rounded-2xl">
-      <div className="relative px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+    <div className={`certificate-configurator relative overflow-hidden rounded-2xl ${tabletMode ? 'certificate-configurator--tablet' : ''} ${compact ? 'bg-transparent' : 'bg-gradient-to-br from-primary/5 via-accent/5 to-primary/10'}`}>
+      <div className={`relative ${compact ? 'p-0' : 'px-4 sm:px-6 lg:px-8 py-8 sm:py-10'}`}>
         <div className={`grid ${gridCols} gap-6 lg:gap-10 items-start`}>
           {showDescription && (
             <div className="flex flex-col justify-start pt-2">
@@ -545,7 +549,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                   <button
                     type="button"
                     onClick={() => scrollCarousel(holidayCarouselRef, 'left')}
-                    className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
+                    className="certificate-configurator__carousel-button absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
                   >
                     ‹
                   </button>
@@ -555,7 +559,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                         key={holiday.id}
                         type="button"
                         onClick={() => setSelectedHoliday(holiday.id)}
-                        className={`relative flex-shrink-0 w-[calc((100%-16px)/3)] aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all snap-start bg-stone-700 ${
+                        className={`certificate-configurator__option relative flex-shrink-0 w-[calc((100%-16px)/3)] aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all snap-start bg-stone-700 ${
                           selectedHoliday === holiday.id
                             ? 'border-primary ring-2 ring-primary/30'
                             : 'border-transparent hover:border-white/30'
@@ -574,7 +578,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                     <button
                       type="button"
                       onClick={() => setSelectedHoliday('custom')}
-                      className={`relative flex-shrink-0 w-[calc((100%-16px)/3)] aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all snap-start bg-gradient-to-br from-stone-700 via-stone-600 to-stone-700 ${
+                      className={`certificate-configurator__option relative flex-shrink-0 w-[calc((100%-16px)/3)] aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all snap-start bg-gradient-to-br from-stone-700 via-stone-600 to-stone-700 ${
                         selectedHoliday === 'custom'
                           ? 'border-primary ring-2 ring-primary/30'
                           : 'border-transparent hover:border-white/30'
@@ -604,7 +608,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                   <button
                     type="button"
                     onClick={() => scrollCarousel(holidayCarouselRef, 'right')}
-                    className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
+                    className="certificate-configurator__carousel-button absolute right-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
                   >
                     ›
                   </button>
@@ -617,7 +621,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                   <button
                     type="button"
                     onClick={() => scrollCarousel(colorCarouselRef, 'left')}
-                    className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
+                    className="certificate-configurator__carousel-button absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
                   >
                     ‹
                   </button>
@@ -627,7 +631,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                         key={color.id}
                         type="button"
                         onClick={() => setSelectedColor(color.id)}
-                        className={`relative flex-shrink-0 w-[calc((100%-16px)/3)] aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all snap-start bg-gradient-to-br ${color.bgClass} ${
+                        className={`certificate-configurator__option relative flex-shrink-0 w-[calc((100%-16px)/3)] aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all snap-start bg-gradient-to-br ${color.bgClass} ${
                           selectedColor === color.id
                             ? 'border-primary ring-2 ring-primary/30'
                             : 'border-transparent hover:border-white/30'
@@ -647,7 +651,7 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
                   <button
                     type="button"
                     onClick={() => scrollCarousel(colorCarouselRef, 'right')}
-                    className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
+                    className="certificate-configurator__carousel-button absolute right-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-white shadow-md border border-border flex items-center justify-center text-text-primary hover:bg-surface transition-colors"
                   >
                     ›
                   </button>
@@ -748,13 +752,13 @@ const CertificateConfigurator = memo(function CertificateConfigurator({
               </div>
             </div>
 
-            <LegalConsents />
+            <LegalConsents linksDisabled={tabletMode} size={tabletMode ? 'large' : 'default'} />
 
             <button
               type="button"
               onClick={handleSubmit}
               disabled={isCapturing || !isCertAmountValid}
-              className="w-full rounded-xl bg-primary hover:bg-primary-light disabled:opacity-60 text-dark-surface font-bold py-3 text-base transition-colors shadow-lg shadow-primary/20"
+              className="certificate-configurator__submit w-full rounded-xl bg-primary hover:bg-primary-light disabled:opacity-60 text-dark-surface font-bold py-3 text-base transition-colors shadow-lg shadow-primary/20"
             >
               {isCapturing ? 'Подготовка сертификата…' : (submitLabel ?? `Подарить — ${certAmount.toLocaleString('ru-RU')} ₽`)}
             </button>

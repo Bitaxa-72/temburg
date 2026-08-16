@@ -29,7 +29,7 @@ import { usePricing } from '@/hooks/useWordPressData';
 import PricingPreviewSection from '@/components/sections/home/PricingPreviewSection';
 import LegalConsents from '@/components/shared/LegalConsents';
 import type { WPGiftBox, WPMerchItem } from '@/api/wordpress';
-import { getTariffOptionId } from '@/utils/pricingTariffs';
+import { formatDateRu, getTariffOptionId, getTariffTimeWindowText, isDateAfter, normalizeNoticeLines, normalizeTimeValue } from '@/utils/pricingTariffs';
 import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
 
 const serviceLinks = [
@@ -41,11 +41,6 @@ const serviceLinks = [
 
 // Fallback data (used while loading or on error)
 import {
-  weekdayPricing as fallbackWeekday,
-  weekendPricing as fallbackWeekend,
-  pensionerPricing,
-  childUnder6Price,
-  overtimeRates,
   subscriptions as fallbackSubscriptions,
   giftBoxes as fallbackGiftBoxes,
   merchItems as fallbackMerchItems,
@@ -62,25 +57,26 @@ const subscriptionHighlights: Record<string, { badge?: string; badgeVariant?: 'd
   'sub-trio-1': { badge: 'Выгодно', badgeVariant: 'success' },
 };
 
+function getToday() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 /* ─── Pricing cards ─── */
 function PricingCards() {
   const { openPurchase } = useBooking();
   const [tab, setTab] = useState<'weekday' | 'weekend'>('weekday');
-  const { data: wpPricing, loading, error } = usePricing();
+  const { data: wpPricing, loading } = usePricing();
   const content = wpPricing.pricingContent;
-  const useStaticPricing = !!error;
 
-  const weekdayPricing = useStaticPricing
-    ? fallbackWeekday
-    : (wpPricing.weekday || []).map(p => ({ ...p, id: String(p.id) }));
-  const weekendPricing = useStaticPricing
-    ? fallbackWeekend
-    : (wpPricing.weekend || []).map(p => ({ ...p, id: String(p.id) }));
-  const pensionerSlots = useStaticPricing
-    ? pensionerPricing
-    : (wpPricing.pensioner || []).map((p) => ({ ...p, id: String(p.id) }));
-  const activeOvertimeRates = useStaticPricing ? overtimeRates : (wpPricing.overtime || []);
-  const childPrice = wpPricing.childUnder6 ?? childUnder6Price;
+  const weekdayPricing = (wpPricing.weekday || []).map(p => ({ ...p, id: String(p.id) }));
+  const weekendPricing = (wpPricing.weekend || []).map(p => ({ ...p, id: String(p.id) }));
+  const pensionerSlots = (wpPricing.pensioner || []).map((p) => ({ ...p, id: String(p.id) }));
+  const activeOvertimeRates = wpPricing.overtime || [];
+  const childPrice = wpPricing.childUnder6 ?? 0;
   const childNote = (content?.childNote || 'Дети до 6 лет включительно — {price} ₽ безлимит')
     .replace('{price}', childPrice.toLocaleString('ru-RU'));
 
@@ -151,24 +147,37 @@ function PricingCards() {
         {pricing.map((slot) => {
           const isPopular = slot.id.includes('3h');
           const isHit = slot.id.includes('unlimited');
+          const noticeLines = normalizeNoticeLines(slot.noticeLines);
+          const availableUntil = String(slot.availableUntil || '');
+          const purchaseTimeFrom = normalizeTimeValue(slot.purchaseTimeFrom);
+          const purchaseTimeTo = normalizeTimeValue(slot.purchaseTimeTo);
+          const timeWindowText = getTariffTimeWindowText({ from: purchaseTimeFrom, to: purchaseTimeTo });
+          const isExpired = isDateAfter(getToday(), availableUntil);
           return (
             <div
               key={slot.id}
-              onClick={() => openPurchase({
-                name: `${tabLabel} — ${slot.name}`,
-                price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽`,
-                childPrice: `${slot.childPrice.toLocaleString('ru-RU')} ₽`,
-                tariffId: getTariffOptionId(slot),
-                tariffLabel: slot.name,
-                tariffPeriod: tab,
-              })}
+              onClick={() => {
+                if (isExpired) return;
+                openPurchase({
+                  name: `${tabLabel} — ${slot.name}`,
+                  price: `${slot.adultPrice.toLocaleString('ru-RU')} ₽`,
+                  childPrice: `${slot.childPrice.toLocaleString('ru-RU')} ₽`,
+                  tariffId: getTariffOptionId(slot),
+                  tariffLabel: slot.name,
+                  tariffPeriod: tab,
+                  availableUntil,
+                  noticeLines,
+                  purchaseTimeFrom,
+                  purchaseTimeTo,
+                });
+              }}
               className={`relative rounded-2xl border p-6 transition-all duration-300 cursor-pointer hover:-translate-y-1 hover:shadow-lg ${
                 isHit
                   ? 'bg-gradient-to-br from-primary/5 to-primary/10 border-primary/30 ring-1 ring-primary/10'
                   : isPopular
                     ? 'bg-gradient-to-br from-amber-50 to-orange-50/50 border-amber-200/50'
                     : 'bg-surface border-border/50 hover:border-primary/20'
-              }`}
+              } ${isExpired ? 'opacity-60 cursor-not-allowed hover:translate-y-0 hover:shadow-none' : ''}`}
             >
               {/* Badge */}
               {(isPopular || isHit) && (
@@ -209,6 +218,21 @@ function PricingCards() {
                     {slot.adultPrice.toLocaleString('ru-RU')}&nbsp;&#8381;
                   </span>
                 </div>
+                {noticeLines.map((line) => (
+                  <p key={line} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center text-xs font-medium text-red-600">
+                    {line}
+                  </p>
+                ))}
+                {availableUntil && (
+                  <p className={`rounded-lg border px-3 py-2 text-center text-xs font-medium ${isExpired ? 'border-red-200 bg-red-50 text-red-600' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                    Доступно по {formatDateRu(availableUntil)}
+                  </p>
+                )}
+                {timeWindowText && (
+                  <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-center text-xs font-medium text-red-600">
+                    Приобрести можно на время {timeWindowText}
+                  </p>
+                )}
               </div>
 
               {/* CTA hint */}
@@ -659,11 +683,12 @@ export default function PricingPage() {
       }));
   const giftBoxes: Array<WPGiftBox | typeof fallbackGiftBoxes[0]> =
     useStaticPricing ? fallbackGiftBoxes : (wpPricing.giftBoxes || []);
+  const showGiftBoxes = false;
   const merchItems: Array<WPMerchItem | typeof fallbackMerchItems[0]> =
     useStaticPricing ? fallbackMerchItems : (wpPricing.merchItems || []);
   const includedItems = useStaticPricing ? includedServices : (pricingContent?.includedItems || []);
   const hasIncludedItems = includedItems.length > 0;
-  const hasVisitPricing = pricingLoading || useStaticPricing || (wpPricing.weekday || []).length > 0 || (wpPricing.weekend || []).length > 0;
+  const hasVisitPricing = pricingLoading || (wpPricing.weekday || []).length > 0 || (wpPricing.weekend || []).length > 0;
 
   return (
     <PageLayout>
@@ -779,7 +804,7 @@ export default function PricingPage() {
       </>
       )}
       <PricingPreviewSection />
-      {giftBoxes.length > 0 && (
+      {showGiftBoxes && giftBoxes.length > 0 && (
       <>
 
       {/* ── Premium Gift boxes ── */}
