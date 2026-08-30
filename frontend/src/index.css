@@ -831,6 +831,7 @@ p, span, a, li {
 
 .service-manager__body {
   display: block;
+  min-width: 0;
   max-width: 1840px;
   margin: 0 auto;
 }
@@ -847,6 +848,7 @@ p, span, a, li {
 
 .service-manager__control-card {
   width: fit-content;
+  max-width: 100%;
   padding: 12px;
   border-radius: 24px;
 }
@@ -984,6 +986,7 @@ p, span, a, li {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .service-manager__master-name {
@@ -995,6 +998,7 @@ p, span, a, li {
 .service-manager__select,
 .service-manager__textarea {
   width: 100%;
+  min-width: 0;
   border: 1px solid #e8e0d2;
   color: #3d3530;
   background: #fff;
@@ -1067,6 +1071,7 @@ p, span, a, li {
 
 .service-manager__board {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   border-radius: 28px;
 }
@@ -1381,6 +1386,11 @@ p, span, a, li {
     flex-direction: column;
   }
 
+  .service-manager__top > div:first-child {
+    flex: 0 1 auto;
+    width: 100%;
+  }
+
   .service-manager__week-control {
     justify-content: flex-start;
   }
@@ -1400,8 +1410,13 @@ p, span, a, li {
 }
 
 @media (max-width: 1000px) {
+  .service-manager {
+    overflow-x: hidden;
+  }
+
   .service-manager__controls {
     grid-template-columns: 1fr;
+    min-width: 0;
   }
 
   .service-manager__control-card {
@@ -1434,12 +1449,12 @@ p, span, a, li {
 
   .service-manager__grid {
     width: max-content;
-    min-width: 1068px;
+    min-width: 980px;
   }
 
   .service-manager__grid,
   .service-manager__grid-row {
-    grid-template-columns: 76px repeat(7, 140px);
+    grid-template-columns: 72px repeat(7, 130px);
   }
 }
 
@@ -1456,6 +1471,15 @@ p, span, a, li {
   .service-manager__controls,
   .service-manager__panel--masters {
     grid-template-columns: 1fr;
+  }
+
+  .service-manager__top {
+    gap: 12px;
+  }
+
+  .service-manager__title {
+    font-size: 30px;
+    line-height: 1;
   }
 
   .service-manager__section-tabs {
@@ -1483,6 +1507,28 @@ p, span, a, li {
     grid-template-columns: 1fr;
   }
 
+  .service-manager__master-time--shift {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 38px;
+  }
+
+  .service-manager__master-time--add {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-manager__master-add .service-manager__button {
+    justify-self: stretch;
+  }
+
+  .service-manager__board {
+    border-radius: 20px;
+  }
+
+  .service-manager__board-scroll {
+    max-height: none;
+  }
+
   .service-manager__slot {
     padding: 6px;
   }
@@ -1490,5 +1536,61 @@ p, span, a, li {
   .service-manager__grid-row--filled .service-manager__grid-hour,
   .service-manager__grid-row--filled .service-manager__slot {
     min-height: 96px;
+  }
+}
+
+@media (max-width: 480px) {
+  .service-manager {
+    padding: 8px;
+  }
+
+  .service-manager__week-control {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    gap: 8px;
+  }
+
+  .service-manager__icon-button,
+  .service-manager__week-button {
+    min-height: 42px;
+    height: 42px;
+    border-radius: 14px;
+  }
+
+  .service-manager__week-button {
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .service-manager__control-card,
+  .service-manager__panel {
+    border-radius: 18px;
+  }
+
+  .service-manager__section-tab {
+    min-height: 42px;
+  }
+
+  .service-manager__day-tabs {
+    grid-template-columns: repeat(7, 58px);
+  }
+
+  .service-manager__day-tab {
+    min-width: 58px;
+    min-height: 52px;
+    border-radius: 14px;
+  }
+
+  .service-manager__grid {
+    min-width: 868px;
+  }
+
+  .service-manager__grid,
+  .service-manager__grid-row {
+    grid-template-columns: 64px repeat(7, 115px);
+  }
+
+  .service-manager__grid-hour {
+    padding: 9px 6px;
   }
 }

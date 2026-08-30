@@ -628,8 +628,8 @@ export default function ServiceManagerPage() {
   };
 
   const addMaster = () => {
-    const name = newMasterName.trim();
-    if (!name || newMasterEnd <= newMasterStart) {
+    const name = newMasterName.trim() || `Мастер ${selectedDayShifts.length + 1}`;
+    if (newMasterEnd <= newMasterStart) {
       return;
     }
     const newShift = {
@@ -891,7 +891,7 @@ export default function ServiceManagerPage() {
                         onChange={(event) => updateShift(shift.id, { name: event.target.value })}
                       />
                     </div>
-                    <div className="service-manager__master-time">
+                    <div className="service-manager__master-time service-manager__master-time--shift">
                       <select
                         className="service-manager__select"
                         value={shift.startHour}
@@ -925,7 +925,7 @@ export default function ServiceManagerPage() {
                 value={newMasterName}
                 onChange={(event) => setNewMasterName(event.target.value)}
               />
-                <div className="service-manager__master-time">
+                <div className="service-manager__master-time service-manager__master-time--add">
                   <select className="service-manager__select" value={newMasterStart} onChange={(event) => setNewMasterStart(Number(event.target.value))}>
                     {shiftHourOptions.slice(0, -1).map((hour) => (
                       <option key={hour} value={hour}>{formatHour(hour)}</option>
