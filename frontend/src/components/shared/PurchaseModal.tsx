@@ -7,7 +7,7 @@ import PromoCodeField, { type PromoValidation } from '@/components/shared/PromoC
 import { type PricingSlot } from '@/data/pricing';
 import { bookingsApi, paymentsApi, type ServiceType } from '@/services/api';
 import { getApiUrl } from '@/api/wordpress';
-import { findPricingSlot, formatDateRu, getDefaultTariffId, getTariffAvailableUntil, getTariffLabel, getTariffNoticeLines, getTariffOptions, getTariffTimeWindow, getTariffTimeWindowText, isDateAfter, isTimeOutsideTariffWindow, normalizeNoticeLines, normalizeTimeValue, tariffUsesFridayWeekendAllDay, type TariffOption } from '@/utils/pricingTariffs';
+import { findPricingSlot, formatDateRu, getDefaultTariffId, getTariffAvailableUntil, getTariffLabel, getTariffNoticeLines, getTariffOptions, getTariffTimeWindow, getTariffTimeWindowText, isDateAfter, isFridayWeekendTime, isTimeOutsideTariffWindow, normalizeNoticeLines, normalizeTimeValue, tariffUsesFridayWeekendAllDay, type TariffOption } from '@/utils/pricingTariffs';
 import { cleanPaymentReturnUrl, clearPendingCheckout, getPaymentReturnParams, getPendingCheckout, markPendingCheckoutConfirmed, savePendingCheckout } from '@/utils/paymentReturn';
 import { buildServiceBookingFallbackSlots, formatServiceBookingRange, getServiceBookingMinDate, getServiceReservedHours, normalizeServiceBookingSection, normalizeServiceBookingSlots, type ServiceBookingSlot } from '@/utils/serviceBooking';
 import { catalogKey, catalogSourceId } from '@/utils/catalogItems';
@@ -50,11 +50,6 @@ function isFriday(dateStr: string) {
 
 function isSpecialWeekendDate(dateStr: string, specialWeekendDates: Set<string>) {
   return dateStr !== '' && specialWeekendDates.has(dateStr);
-}
-
-function isFridayWeekendTime(timeStr: string) {
-  const [hours = '0', minutes = '0'] = timeStr.split(':');
-  return Number(hours) * 60 + Number(minutes) >= 18 * 60;
 }
 
 function getTicketTariffId(itemName: string, tariffOptions: TariffOption[]) {
@@ -198,6 +193,9 @@ export default function PurchaseModal() {
   );
   const pricingContent = wpPricing?.pricingContent ?? {};
   const modalText = pricingContent.purchaseModal ?? {};
+  const fridayWeekendFrom = normalizeTimeValue(pricingContent.fridayWeekendFrom);
+  const fridayWeekdayLabel = fridayWeekendFrom ? `До ${fridayWeekendFrom}` : 'До';
+  const fridayWeekendLabel = fridayWeekendFrom ? `После ${fridayWeekendFrom}` : 'После';
   const tariffOptions = useMemo(
     () => getTariffOptions(weekdayPricing, weekendPricing),
     [weekdayPricing, weekendPricing]
@@ -283,7 +281,7 @@ export default function PurchaseModal() {
       ? (
           isSpecialWeekendDate(visitDate, specialWeekendDates)
           || isWeekend(visitDate)
-          || (isFriday(visitDate) && (mainTicketUsesFridayWeekendAllDay || isFridayWeekendTime(visitTime)))
+          || (isFriday(visitDate) && (mainTicketUsesFridayWeekendAllDay || isFridayWeekendTime(visitTime, fridayWeekendFrom)))
         )
       : purchaseItem?.tariffPeriod === 'weekend'
   );
@@ -323,11 +321,11 @@ export default function PurchaseModal() {
     if (!addTicket || !ticketDate) return 0;
     const useWeekendPricing = isSpecialWeekendDate(ticketDate, specialWeekendDates)
       || isWeekend(ticketDate)
-      || (isFriday(ticketDate) && (ticketUsesFridayWeekendAllDay || isFridayWeekendTime(normalizedTicketTime)));
+      || (isFriday(ticketDate) && (ticketUsesFridayWeekendAllDay || isFridayWeekendTime(normalizedTicketTime, fridayWeekendFrom)));
     const pricing = useWeekendPricing ? weekendPricing : weekdayPricing;
     const slot = findPricingSlot(pricing, ticketTariff, tariffOptions);
     return slot?.adultPrice ?? 0;
-  }, [addTicket, ticketDate, ticketTariff, ticketUsesFridayWeekendAllDay, normalizedTicketTime, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
+  }, [addTicket, ticketDate, ticketTariff, ticketUsesFridayWeekendAllDay, normalizedTicketTime, fridayWeekendFrom, specialWeekendDates, weekendPricing, weekdayPricing, tariffOptions]);
 
   // Стоимость детского билета
   const childPrice = useMemo(() => {
@@ -1018,11 +1016,11 @@ export default function PurchaseModal() {
               <p className="mt-1 text-xl font-bold text-primary">
                 {isTicket ? `${servicePrice.toLocaleString('ru-RU')} ₽` : displayPrice}
               </p>
-              {(purchaseItem.name.includes('Будни') || purchaseItem.name.includes('Выходные')) && (
+              {(purchaseItem.name.includes('Будни') || purchaseItem.name.includes('Выходные')) && (mainTicketUsesFridayWeekendAllDay || pricingContent.fridayNote) && (
                 <p className="mt-2 text-xs text-text-secondary/70">
                   {mainTicketUsesFridayWeekendAllDay
                     ? 'Пятница: для этого тарифа весь день действует тариф выходного дня'
-                    : (pricingContent.fridayNote || 'Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных')}
+                    : (pricingContent.fridayNote || '')}
                 </p>
               )}
               {isTicket && visitDate && (
@@ -1199,7 +1197,7 @@ export default function PurchaseModal() {
                         value={ticketTime}
                         onChange={(e) => {
                           setTicketTime(e.target.value);
-                          setFridayTime(isFridayWeekendTime(normalizeTimeValue(e.target.value)) ? 'after18' : 'before18');
+                          setFridayTime(isFridayWeekendTime(normalizeTimeValue(e.target.value), fridayWeekendFrom) ? 'after18' : 'before18');
                         }}
                         className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
                       />
@@ -1207,8 +1205,7 @@ export default function PurchaseModal() {
 
                     {renderServiceBookingTimePicker()}
 
-                    {/* Пятница: до/после 18:00 */}
-                    {ticketDate && isFriday(ticketDate) && !isSpecialWeekendDate(ticketDate, specialWeekendDates) && !ticketUsesFridayWeekendAllDay && (
+                    {ticketDate && fridayWeekendFrom && isFriday(ticketDate) && !isSpecialWeekendDate(ticketDate, specialWeekendDates) && !ticketUsesFridayWeekendAllDay && (
                       <div>
                         <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-800">
                           <Clock className="w-3.5 h-3.5" />
@@ -1227,13 +1224,13 @@ export default function PurchaseModal() {
                                 : 'bg-white border-amber-200 text-amber-800 hover:border-primary/30'
                             }`}
                           >
-                          До 18:00
+                          {fridayWeekdayLabel}
                             <span className="block text-[10px] opacity-70">тариф будней</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => {
-                              setTicketTime('18:00');
+                              setTicketTime(fridayWeekendFrom);
                               setFridayTime('after18');
                             }}
                             className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-all border ${
@@ -1242,7 +1239,7 @@ export default function PurchaseModal() {
                                 : 'bg-white border-amber-200 text-amber-800 hover:border-primary/30'
                             }`}
                           >
-                          После 18:00
+                          {fridayWeekendLabel}
                             <span className="block text-[10px] opacity-70">тариф выходных</span>
                           </button>
                         </div>

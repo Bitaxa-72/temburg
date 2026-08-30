@@ -59,7 +59,7 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
     : (content.weekdayLabel || 'Будни');
   const pricingHint = isSpecialWeekendToday
     ? (content.specialWeekendTodayNote || 'Сегодня для дневных тарифов действует цена выходного или праздничного дня.')
-    : (content.fridayNote || 'Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных');
+    : (content.fridayNote || '');
   const childNote = (content.childNote || 'Дети до 6 лет включительно — {price} ₽ безлимит')
     .replace('{price}', childUnder6Price.toLocaleString('ru-RU'));
 
@@ -141,9 +141,11 @@ const PricingPreviewSection = memo(function PricingPreviewSection() {
               )}
             </div>
 
-            <p className="text-xs text-text-secondary/70 text-center mb-8 -mt-4">
-              {pricingHint}
-            </p>
+            {pricingHint && (
+              <p className="text-xs text-text-secondary/70 text-center mb-8 -mt-4">
+                {pricingHint}
+              </p>
+            )}
 
             {hasExtraInfo && (
               <div className="grid sm:grid-cols-2 gap-4 mb-12">

@@ -107,6 +107,7 @@ export interface WPPricingContent {
   specialWeekendTodayLabel?: string;
   specialWeekendTodayNote?: string;
   fridayNote?: string;
+  fridayWeekendFrom?: string;
   childTitle?: string;
   childNote?: string;
   pensionerTitle?: string;

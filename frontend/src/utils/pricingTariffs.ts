@@ -102,6 +102,19 @@ export function normalizeTimeValue(value: unknown) {
   return `${match[1].padStart(2, '0')}:${match[2]}`;
 }
 
+export function timeToMinutes(value: unknown, fallback = 0) {
+  const normalized = normalizeTimeValue(value);
+  if (!normalized) return fallback;
+
+  const [hours = '0', minutes = '0'] = normalized.split(':');
+  return Number(hours) * 60 + Number(minutes);
+}
+
+export function isFridayWeekendTime(time: unknown, fridayWeekendFrom: string) {
+  const normalizedCutoff = normalizeTimeValue(fridayWeekendFrom);
+  return normalizedCutoff !== '' && timeToMinutes(time, 0) >= timeToMinutes(normalizedCutoff, 0);
+}
+
 export function getTariffNoticeLines(
   options: TariffOption[],
   tariffId: string,

@@ -137,9 +137,11 @@ function PricingCards() {
             {content?.weekendLabel || 'Выходные / Праздники'}
           </button>
         </div>
-        <p className="text-xs text-text-secondary/70 mt-3">
-          {content?.fridayNote || 'Пятница: до 18:00 — тариф будней, после 18:00 — тариф выходных'}
-        </p>
+        {content?.fridayNote && (
+          <p className="text-xs text-text-secondary/70 mt-3">
+            {content.fridayNote}
+          </p>
+        )}
       </div>
 
       {/* Cards grid */}
